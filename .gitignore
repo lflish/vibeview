@@ -1,0 +1,12 @@
+# 依赖
+node_modules/
+
+# 配置文件（含 token / 管理密码 / session secret，严禁上传）
+config.yaml
+
+# 上传的数据文件
+data/
+
+# 日志和系统文件
+*.log
+.DS_Store

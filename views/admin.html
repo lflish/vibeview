@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vibeview · 管理</title>
+<style>
+  body{margin:0;background:#1a1a1a;color:#eee;font-family:system-ui,sans-serif;}
+  header{display:flex;align-items:center;justify-content:space-between;
+         padding:16px 24px;background:#262626;border-bottom:1px solid #333;}
+  header h1{margin:0;font-size:18px;}
+  header form{margin:0;}
+  .btn{padding:8px 14px;border:0;border-radius:6px;cursor:pointer;font-size:13px;}
+  .logout{background:#444;color:#eee;}
+  .del{background:#c0392b;color:#fff;}
+  main{padding:24px;}
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #333;}
+  th{color:#999;font-weight:600;}
+  a{color:#4f8cff;text-decoration:none;}
+  a:hover{text-decoration:underline;}
+  .tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;background:#333;}
+  .empty{color:#888;padding:40px;text-align:center;}
+</style>
+</head>
+<body>
+  <header>
+    <h1>vibeview 管理端</h1>
+    <form method="post" action="/admin/logout"><button class="btn logout">退出登录</button></form>
+  </header>
+  <main>
+    <table id="tbl">
+      <thead>
+        <tr><th>文件名</th><th>类型</th><th>大小</th><th>来源</th><th>上传时间</th><th>操作</th></tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" style="display:none">暂无上传内容</div>
+  </main>
+  <script>
+    function fmtSize(n){
+      if(n<1024) return n+' B';
+      if(n<1048576) return (n/1024).toFixed(1)+' KB';
+      return (n/1048576).toFixed(1)+' MB';
+    }
+    function fmtTime(s){ try{return new Date(s).toLocaleString('zh-CN');}catch{return s;} }
+    function td(text){ const c=document.createElement('td'); c.textContent=text; return c; }
+
+    function rowFor(it){
+      const tr = document.createElement('tr');
+
+      const tdName = document.createElement('td');
+      const a = document.createElement('a');
+      a.href = it.url; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = it.filename;
+      tdName.appendChild(a);
+      tr.appendChild(tdName);
+
+      const tdType = document.createElement('td');
+      const tag = document.createElement('span');
+      tag.className = 'tag'; tag.textContent = it.type;
+      tdType.appendChild(tag);
+      tr.appendChild(tdType);
+
+      tr.appendChild(td(fmtSize(it.size)));
+      tr.appendChild(td(it.source || '-'));
+      tr.appendChild(td(fmtTime(it.createdAt)));
+
+      const tdOp = document.createElement('td');
+      const btn = document.createElement('button');
+      btn.className = 'btn del'; btn.textContent = '删除';
+      btn.onclick = () => del(it.id, it.filename);
+      tdOp.appendChild(btn);
+      tr.appendChild(tdOp);
+
+      return tr;
+    }
+
+    async function load(){
+      const r = await fetch('/admin/api/list');
+      const { items } = await r.json();
+      const tbody = document.getElementById('rows');
+      tbody.replaceChildren();
+      document.getElementById('empty').style.display = items.length ? 'none' : 'block';
+      for(const it of items) tbody.appendChild(rowFor(it));
+    }
+    async function del(id, name){
+      if(!confirm('确认删除 '+name+' ?')) return;
+      await fetch('/admin/api/item/'+id, { method:'DELETE' });
+      load();
+    }
+    load();
+  </script>
+</body>
+</html>

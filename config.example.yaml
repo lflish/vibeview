@@ -1,0 +1,32 @@
+# vibeview 配置文件示例
+# 复制本文件为 config.yaml 并填入真实值。config.yaml 已被 .gitignore 忽略，切勿提交。
+
+server:
+  port: 3000
+  # 生成预览链接用的对外地址（不要带结尾斜杠）
+  base_url: "http://localhost:3000"
+
+storage:
+  # 按类型分目录存储；每个文件落在 <type_dir>/<id>/<原文件名>
+  html_dir: "./data/html"
+  image_dir: "./data/images"
+  video_dir: "./data/videos"
+  # 元数据存放目录，每条上传一个 <id>.json
+  meta_dir: "./data/meta"
+  # 文件保留天数，超过后自动清理
+  retention_days: 7
+  # 单文件大小上限（MB）
+  max_size_mb: 50
+
+# 上传 token 列表，支持多个。每个 token 带 name 方便管理端识别上传来源。
+# 生成方式示例： openssl rand -hex 24
+tokens:
+  - name: "example-machine"
+    token: "replace-with-a-long-random-token"
+
+# 管理端登录账号
+admin:
+  user: "admin"
+  password: "replace-with-a-strong-password"
+  # session 加密密钥，随便填一长串随机字符： openssl rand -hex 32
+  session_secret: "replace-with-a-random-session-secret"
