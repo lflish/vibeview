@@ -10,8 +10,9 @@
 #   本地仓库内执行：
 #     bash install-skill.sh
 #
-# 作用：把 dview-upload Skill 安装到 ~/.claude/skills/，并把 DVIEW_URL / DVIEW_TOKEN
-#       写入你的 shell 配置（~/.zshrc 或 ~/.bashrc），方便随时调用。
+# 作用：把 dview-upload Skill 安装到 ~/.claude/skills/，把 /dview 命令安装到
+#       ~/.claude/commands/，并把 DVIEW_URL / DVIEW_TOKEN 写入你的 shell 配置
+#       （~/.zshrc 或 ~/.bashrc），方便随时调用。
 
 set -euo pipefail
 
@@ -19,6 +20,8 @@ REPO_RAW="https://raw.githubusercontent.com/lflish/vibeview/main"
 SKILL_NAME="dview-upload"
 SKILLS_DIR="${CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 DEST="$SKILLS_DIR/$SKILL_NAME"
+COMMANDS_DIR="${CLAUDE_COMMANDS_DIR:-$HOME/.claude/commands}"
+COMMAND_NAME="dview"
 
 info()  { printf '\033[36m[vibeview]\033[0m %s\n' "$1"; }
 warn()  { printf '\033[33m[vibeview]\033[0m %s\n' "$1"; }
@@ -40,6 +43,16 @@ else
 fi
 chmod +x "$DEST/upload.sh"
 info "Skill 文件已就位"
+
+# 1b. 安装 /dview 命令到 ~/.claude/commands/
+info "安装 /$COMMAND_NAME 命令到: $COMMANDS_DIR/$COMMAND_NAME.md"
+mkdir -p "$COMMANDS_DIR"
+if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/command/$COMMAND_NAME.md" ]; then
+  cp "$SCRIPT_DIR/command/$COMMAND_NAME.md" "$COMMANDS_DIR/$COMMAND_NAME.md"
+else
+  curl -fsSL "$REPO_RAW/command/$COMMAND_NAME.md" -o "$COMMANDS_DIR/$COMMAND_NAME.md"
+fi
+info "命令文件已就位（在 Claude Code 中输入 /$COMMAND_NAME 使用）"
 
 # 2. 收集配置（环境变量优先，否则交互输入；管道执行时无 tty 则跳过）
 URL="${DVIEW_URL:-}"
@@ -79,5 +92,7 @@ fi
 echo ""
 info "安装完成 ✅"
 echo "  Skill 位置: $DEST"
-echo "  使用方法:   bash $DEST/upload.sh <文件路径>"
+echo "  命令位置:   $COMMANDS_DIR/$COMMAND_NAME.md"
+echo "  使用方法:   在 Claude Code 中输入  /$COMMAND_NAME <页面描述>   一步生成并上传"
+echo "  或手动上传: bash $DEST/upload.sh <文件路径>"
 echo "  或重载配置后直接让 AI 调用 dview-upload Skill。"
