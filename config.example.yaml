@@ -13,20 +13,36 @@ storage:
   video_dir: "./data/videos"
   # 元数据存放目录，每条上传一个 <id>.json
   meta_dir: "./data/meta"
-  # 文件保留天数，超过后自动清理
+  # 文件保留天数，超过后自动清理（账户可单独覆盖）
   retention_days: 7
   # 单文件大小上限（MB）
   max_size_mb: 50
 
-# 上传 token 列表，支持多个。每个 token 带 name 方便管理端识别上传来源。
+# 上传账户列表：每个 token 即一个「账户 / 来源」。
+# name 会写入资源 meta.source，用于管理端筛选、用量统计与自助 API 鉴权。
 # 生成方式示例： openssl rand -hex 24
 tokens:
   - name: "example-machine"
     token: "replace-with-a-long-random-token"
+    # 可选配额（不写则不限制，仅受全局 max_size_mb 约束）
+    # max_files: 100
+    # max_storage_mb: 500
+    # 可选：覆盖全局保留天数；0 表示该账户资源不自动清理
+    # retention_days: 3
+    # 可选：配置级停用（也可用管理端一键停用，写入 data/account-state.json）
+    # disabled: false
 
-# 管理端登录账号
+# 管理端登录账号（全局管理员，可看全部账户资源）
 admin:
   user: "admin"
   password: "replace-with-a-strong-password"
   # session 加密密钥，随便填一长串随机字符： openssl rand -hex 32
   session_secret: "replace-with-a-random-session-secret"
+
+# 预览渲染 sidecar（可选）。默认关闭：主服务本地直出 /v（无 Docker 开发）。
+# 生产：docker compose up -d 起 render 后设 proxy_to_render: true
+# 也可用环境变量：DVIEW_PREVIEW_PROXY=true  DVIEW_RENDER_URL=http://127.0.0.1:3001
+preview:
+  proxy_to_render: false
+  render_url: "http://127.0.0.1:3001"
+  proxy_timeout_ms: 30000
