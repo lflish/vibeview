@@ -1,0 +1,88 @@
+# Example: upload a built HTML page to vibeview and comment the preview URL on the PR.
+# Copy to .github/workflows/ and adjust paths / triggers.
+# Secrets required: DVIEW_URL, DVIEW_TOKEN
+
+name: vibeview preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Replace with your real build; this demo writes a tiny HTML artifact.
+      - name: Build demo HTML
+        env:
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p dist
+          cat > dist/index.html <<EOF
+          <!DOCTYPE html>
+          <html lang="en">
+          <head><meta charset="utf-8"><title>PR preview</title></head>
+          <body>
+            <h1>vibeview PR preview</h1>
+            <p>repo: ${REPO}</p>
+            <p>sha: ${SHA}</p>
+          </body>
+          </html>
+          EOF
+
+      - name: Upload to vibeview
+        id: dview
+        env:
+          DVIEW_URL: ${{ secrets.DVIEW_URL }}
+          DVIEW_TOKEN: ${{ secrets.DVIEW_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DVIEW_URL:-}" ] || [ -z "${DVIEW_TOKEN:-}" ]; then
+            echo "Missing secrets DVIEW_URL / DVIEW_TOKEN" >&2
+            exit 1
+          fi
+          RESP=$(curl -fsS -X POST "${DVIEW_URL%/}/upload" \
+            -H "Authorization: Bearer ${DVIEW_TOKEN}" \
+            -F "file=@dist/index.html")
+          URL=$(printf '%s' "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['url'])")
+          ID=$(printf '%s' "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+          echo "Preview: $URL"
+
+      - name: Comment preview URL on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.dview.outputs.url }}';
+            const id = '${{ steps.dview.outputs.id }}';
+            const body = `### vibeview preview\n\n${url}\n\n_id: \`${id}\`_`;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const marker = '### vibeview preview';
+            const existing = comments.find(c => c.user.type === 'Bot' && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

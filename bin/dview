@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+# vibeview CLI — upload / list / delete own previews
+#
+# Usage:
+#   dview upload <file> [--url URL] [--token TOKEN]
+#   dview list [--url URL] [--token TOKEN]
+#   dview delete <id> [--url URL] [--token TOKEN]
+#   dview me [--url URL] [--token TOKEN]
+# Env: DVIEW_URL, DVIEW_TOKEN (flags override env)
+
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+vibeview CLI — 上传并管理本账户预览资源
+
+用法:
+  dview upload <file>     上传文件，stdout 打印预览 URL
+  dview list              列出本账户资源
+  dview delete <id>       删除本账户下的一条资源
+  dview me                查看本账户信息与用量
+  dview help              显示帮助
+
+选项（可放在子命令前或后）:
+  --url URL               服务地址（默认 $DVIEW_URL）
+  --token TOKEN           上传 token（默认 $DVIEW_TOKEN）
+  -h, --help              显示帮助
+
+环境变量:
+  DVIEW_URL               如 https://view.example.com
+  DVIEW_TOKEN             config.yaml 中某个账户的 token
+
+示例:
+  export DVIEW_URL=https://view.example.com DVIEW_TOKEN=xxx
+  dview upload ./chart.html
+  dview list
+  dview delete Ab3xK9mP2qR7sT1v
+USAGE
+}
+
+err() { printf 'dview: %s\n' "$*" >&2; }
+
+json_field() {
+  local field="$1"
+  local raw="$2"
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s' "$raw" | python3 -c "import sys,json; d=json.load(sys.stdin); v=d.get('$field',''); print(v if v is not None else '')" 2>/dev/null && return 0
+  fi
+  if command -v node >/dev/null 2>&1; then
+    printf '%s' "$raw" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const j=JSON.parse(d);const v=j['$field'];process.stdout.write(v==null?'':String(v))}catch(e){process.exit(1)}})" 2>/dev/null && return 0
+  fi
+  return 1
+}
+
+json_pretty() {
+  local raw="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s' "$raw" | python3 -m json.tool 2>/dev/null && return 0
+  fi
+  if command -v node >/dev/null 2>&1; then
+    printf '%s' "$raw" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.stringify(JSON.parse(d),null,2)))" 2>/dev/null && return 0
+  fi
+  printf '%s\n' "$raw"
+}
+
+format_list() {
+  local raw="$1"
+  if ! command -v python3 >/dev/null 2>&1; then
+    json_pretty "$raw"
+    return
+  fi
+  DVIEW_LIST_JSON="$raw" python3 -c '
+import json, os
+raw = os.environ.get("DVIEW_LIST_JSON", "")
+try:
+    data = json.loads(raw)
+except Exception:
+    print(raw)
+    raise SystemExit(0)
+items = data if isinstance(data, list) else (data.get("items") or data.get("data") or [])
+if not items:
+    print("(empty)")
+    raise SystemExit(0)
+print("%-20s %-8s %10s  %-19s %s" % ("ID", "TYPE", "SIZE", "CREATED", "NAME"))
+for it in items:
+    iid = str(it.get("id") or "")
+    typ = str(it.get("type") or "")
+    size = it.get("size")
+    try:
+        size_s = "{:,}".format(int(size)) if size is not None else "-"
+    except Exception:
+        size_s = str(size or "-")
+    created = str(it.get("createdAt") or it.get("created_at") or "")[:19]
+    name = str(it.get("filename") or it.get("name") or "")
+    print("%-20s %-8s %10s  %-19s %s" % (iid, typ, size_s, created, name))
+'
+}
+
+URL="${DVIEW_URL:-}"
+TOKEN="${DVIEW_TOKEN:-}"
+CMD=""
+ARGS=()
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -h|--help|help)
+      usage
+      exit 0
+      ;;
+    --url)
+      [ "$#" -ge 2 ] || { err "--url 需要参数"; exit 1; }
+      URL="$2"
+      shift 2
+      ;;
+    --token)
+      [ "$#" -ge 2 ] || { err "--token 需要参数"; exit 1; }
+      TOKEN="$2"
+      shift 2
+      ;;
+    upload|list|delete|me|whoami)
+      if [ -n "$CMD" ]; then
+        ARGS+=("$1")
+        shift
+      else
+        CMD="$1"
+        shift
+      fi
+      ;;
+    --)
+      shift
+      ARGS+=("$@")
+      break
+      ;;
+    -*)
+      err "未知选项: $1"
+      usage >&2
+      exit 1
+      ;;
+    *)
+      ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$CMD" ]; then
+  usage >&2
+  exit 1
+fi
+
+require_auth() {
+  if [ -z "$URL" ]; then
+    err "未设置服务地址。请 export DVIEW_URL=... 或传 --url"
+    exit 1
+  fi
+  if [ -z "$TOKEN" ]; then
+    err "未设置 token。请 export DVIEW_TOKEN=... 或传 --token"
+    exit 1
+  fi
+  BASE="${URL%/}"
+}
+
+http() {
+  local method="$1"
+  shift
+  local tmp
+  tmp="$(mktemp)"
+  local code
+  code=$(curl -sS -o "$tmp" -w '%{http_code}' -X "$method" \
+    -H "Authorization: Bearer ${TOKEN}" \
+    "$@" || true)
+  BODY="$(cat "$tmp")"
+  rm -f "$tmp"
+  HTTP_CODE="$code"
+}
+
+cmd_upload() {
+  require_auth
+  if [ "${#ARGS[@]}" -ne 1 ]; then
+    err "用法: dview upload <file>"
+    exit 1
+  fi
+  local file="${ARGS[0]}"
+  if [ ! -f "$file" ]; then
+    err "文件不存在: $file"
+    exit 1
+  fi
+  http POST "${BASE}/upload" -F "file=@${file}"
+  if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
+    err "上传失败 (HTTP ${HTTP_CODE}): ${BODY}"
+    exit 1
+  fi
+  local preview
+  preview="$(json_field url "$BODY" || true)"
+  if [ -z "$preview" ]; then
+    err "上传失败，服务返回: ${BODY}"
+    exit 1
+  fi
+  printf '%s\n' "$preview"
+}
+
+cmd_list() {
+  require_auth
+  http GET "${BASE}/api/me/items"
+  if [ "$HTTP_CODE" != "200" ]; then
+    err "列表失败 (HTTP ${HTTP_CODE}): ${BODY}"
+    exit 1
+  fi
+  format_list "$BODY"
+}
+
+cmd_delete() {
+  require_auth
+  if [ "${#ARGS[@]}" -ne 1 ]; then
+    err "用法: dview delete <id>"
+    exit 1
+  fi
+  local id="${ARGS[0]}"
+  http DELETE "${BASE}/api/me/items/${id}"
+  if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "204" ]; then
+    err "删除失败 (HTTP ${HTTP_CODE}): ${BODY}"
+    exit 1
+  fi
+  printf 'deleted %s\n' "$id"
+}
+
+cmd_me() {
+  require_auth
+  http GET "${BASE}/api/me"
+  if [ "$HTTP_CODE" != "200" ]; then
+    err "查询失败 (HTTP ${HTTP_CODE}): ${BODY}"
+    exit 1
+  fi
+  json_pretty "$BODY"
+}
+
+case "$CMD" in
+  upload) cmd_upload ;;
+  list) cmd_list ;;
+  delete) cmd_delete ;;
+  me|whoami) cmd_me ;;
+  *)
+    err "未知命令: $CMD"
+    usage >&2
+    exit 1
+    ;;
+esac

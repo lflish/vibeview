@@ -40,20 +40,29 @@ echo "DVIEW_URL=${DVIEW_URL:-<未设置>}"; echo "DVIEW_TOKEN=${DVIEW_TOKEN:+<�
 
 ## 步骤 3:上传并返回链接
 
-找到上传脚本并调用(按顺序探测路径,用第一个存在的):
+按顺序探测上传方式(用第一个可用的):
 
-1. 项目内:`skill/dview-upload/upload.sh`
-2. 全局:`$HOME/.claude/skills/dview-upload/upload.sh`
+1. PATH 上的 CLI:`dview upload <文件>`
+2. 项目内 CLI:`bash bin/dview upload <文件>`
+3. 项目内 Skill 脚本:`bash skill/dview-upload/upload.sh <文件>`
+4. 全局 Skill 脚本:`bash $HOME/.claude/skills/dview-upload/upload.sh <文件>`
 
 ```bash
-UP="skill/dview-upload/upload.sh"; [ -f "$UP" ] || UP="$HOME/.claude/skills/dview-upload/upload.sh"
-bash "$UP" <刚生成的HTML路径>
+FILE="<刚生成的HTML路径>"
+if command -v dview >/dev/null 2>&1; then
+  dview upload "$FILE"
+elif [ -x bin/dview ]; then
+  bash bin/dview upload "$FILE"
+else
+  UP="skill/dview-upload/upload.sh"; [ -f "$UP" ] || UP="$HOME/.claude/skills/dview-upload/upload.sh"
+  bash "$UP" "$FILE"
+fi
 ```
 
-- 脚本成功时会在 stdout 打印形如 `https://<域名>/v/<随机id>` 的预览链接
+- 成功时 stdout 打印形如 `https://<域名>/v/<随机id>` 的预览链接
 - 上传成功后,把该链接清晰地展示给用户,一句话说明这是可在浏览器打开的预览页
-- 若两个路径都不存在,提示用户先运行 install-skill.sh 安装 dview-upload skill
-- 若上传失败(脚本非零退出),把错误输出转述给用户,并保留已生成的本地 HTML 路径供其手动处理
+- 若全部路径都不存在,提示用户先运行 `install-skill.sh`（或 `npm link`）安装 CLI / Skill
+- 若上传失败(非零退出),把错误输出转述给用户,并保留已生成的本地 HTML 路径供其手动处理
 
 ## 注意
 
