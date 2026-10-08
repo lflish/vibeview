@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# vibeview 上传脚本
+# vibeview 上传脚本（Skill 内置；完整能力见仓库 bin/dview）
 # 用法: ./upload.sh <文件路径>
 # 依赖环境变量:
 #   DVIEW_URL    服务地址 (如 https://view.example.com)
 #   DVIEW_TOKEN  上传 token (来自服务端 config.yaml 的 tokens 列表)
 # 成功后在 stdout 打印预览 URL。
+# 列表/删除/用量请用: dview list | dview delete <id> | dview me
 
 set -euo pipefail
 
