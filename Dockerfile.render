@@ -1,0 +1,25 @@
+# vibeview 渲染 sidecar：仅预览 /v，无 config / 无上传 / 无 admin
+FROM node:22-alpine
+
+WORKDIR /app
+
+# 仅生产依赖（镜像内会有未使用的 upload/admin 包，路由不会挂载它们）
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+COPY render-server.js ./
+COPY lib/viewer.js lib/preview-store.js lib/preview-routes.js ./lib/
+
+# 非 root
+USER node
+
+ENV RENDER_PORT=3001 \
+    RENDER_DATA_ROOT=/data \
+    NODE_ENV=production
+
+EXPOSE 3001
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:${RENDER_PORT}/healthz || exit 1
+
+CMD ["node", "render-server.js"]
