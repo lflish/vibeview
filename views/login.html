@@ -5,30 +5,107 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>vibeview · 登录</title>
 <style>
-  body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;
-       background:#1a1a1a;color:#eee;font-family:system-ui,sans-serif;}
-  .box{background:#262626;padding:32px;border-radius:12px;width:300px;box-shadow:0 8px 30px rgba(0,0,0,.4);}
-  h1{margin:0 0 20px;font-size:20px;text-align:center;}
-  input{width:100%;box-sizing:border-box;margin:6px 0;padding:10px;border:1px solid #444;
-        border-radius:6px;background:#1a1a1a;color:#eee;}
-  button{width:100%;margin-top:12px;padding:10px;border:0;border-radius:6px;
-         background:#4f8cff;color:#fff;font-size:15px;cursor:pointer;}
-  button:hover{background:#3a78ee;}
-  .err{color:#ff6b6b;font-size:13px;text-align:center;min-height:18px;}
+  :root {
+    --bg: #1a1a1a;
+    --panel: #262626;
+    --border: #3a3a3a;
+    --text: #eee;
+    --muted: #999;
+    --accent: #4f8cff;
+    --accent-hover: #3a78ee;
+    --danger: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif;
+    padding: 20px;
+  }
+  .box {
+    background: var(--panel); padding: 28px 28px 24px; border-radius: 12px; width: 100%;
+    max-width: 340px; box-shadow: 0 8px 30px rgba(0,0,0,.4); border: 1px solid var(--border);
+  }
+  .brand {
+    text-align: center; margin-bottom: 22px;
+  }
+  .brand .logo {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; border-radius: 10px; background: #2a3a55;
+    color: var(--accent); font-weight: 700; font-size: 16px; margin-bottom: 10px;
+  }
+  h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  .sub { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+  label {
+    display: block; font-size: 12px; color: var(--muted); margin: 12px 0 4px;
+  }
+  .field { position: relative; }
+  input {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--bg); color: var(--text); font-size: 14px;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+  .toggle-pw {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    background: transparent; border: 0; color: var(--muted); cursor: pointer;
+    font-size: 12px; padding: 4px 6px;
+  }
+  .toggle-pw:hover { color: var(--text); }
+  button[type="submit"] {
+    width: 100%; margin-top: 18px; padding: 11px; border: 0; border-radius: 6px;
+    background: var(--accent); color: #fff; font-size: 15px; cursor: pointer; font-weight: 500;
+  }
+  button[type="submit"]:hover { background: var(--accent-hover); }
+  button[type="submit"]:disabled { opacity: .6; cursor: not-allowed; }
+  .err {
+    color: var(--danger); font-size: 13px; text-align: center; min-height: 18px;
+    margin: 0 0 4px; padding: 8px 10px; border-radius: 6px;
+    background: rgba(231,76,60,.12); border: 1px solid rgba(231,76,60,.25);
+    display: none;
+  }
+  .err.show { display: block; }
 </style>
 </head>
 <body>
-  <form class="box" method="post" action="/admin/login">
-    <h1>vibeview 管理端</h1>
-    <div class="err" id="err"></div>
-    <input name="user" placeholder="账号" autocomplete="username" autofocus>
-    <input name="password" type="password" placeholder="密码" autocomplete="current-password">
-    <button type="submit">登录</button>
+  <form class="box" method="post" action="/admin/login" id="login-form">
+    <div class="brand">
+      <div class="logo">vv</div>
+      <h1>vibeview 管理端</h1>
+      <p class="sub">登录后可浏览、复制链接与删除预览</p>
+    </div>
+    <div class="err" id="err" role="alert"></div>
+    <label for="user">账号</label>
+    <input id="user" name="user" placeholder="请输入账号" autocomplete="username" autofocus required>
+    <label for="password">密码</label>
+    <div class="field">
+      <input id="password" name="password" type="password" placeholder="请输入密码"
+             autocomplete="current-password" required style="padding-right:52px">
+      <button type="button" class="toggle-pw" id="toggle-pw" aria-label="显示密码">显示</button>
+    </div>
+    <button type="submit" id="submit">登录</button>
   </form>
   <script>
-    if (new URLSearchParams(location.search).get('error')) {
-      document.getElementById('err').textContent = '账号或密码错误';
-    }
+    (function () {
+      var err = document.getElementById('err');
+      if (new URLSearchParams(location.search).get('error')) {
+        err.textContent = '账号或密码错误，请重试';
+        err.classList.add('show');
+        // strip error from URL so refresh doesn't keep flashing
+        if (window.history && history.replaceState) {
+          history.replaceState(null, '', '/admin/login');
+        }
+      }
+      var pw = document.getElementById('password');
+      var toggle = document.getElementById('toggle-pw');
+      toggle.addEventListener('click', function () {
+        var show = pw.type === 'password';
+        pw.type = show ? 'text' : 'password';
+        toggle.textContent = show ? '隐藏' : '显示';
+      });
+      document.getElementById('login-form').addEventListener('submit', function () {
+        document.getElementById('submit').disabled = true;
+        document.getElementById('submit').textContent = '登录中…';
+      });
+    })();
   </script>
 </body>
 </html>
