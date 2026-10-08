@@ -1,0 +1,17 @@
+.git
+.gitignore
+node_modules
+data
+config.yaml
+*.log
+.DS_Store
+.claude
+docs
+examples
+skill
+command
+bin
+views
+AGENTS.md
+install-skill.sh
+README.md

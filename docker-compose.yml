@@ -1,0 +1,42 @@
+# 仅启动渲染 sidecar。主服务仍在宿主机：node server.js
+# 并设置 preview.proxy_to_render: true
+#
+#   docker compose up -d --build
+#   curl -sS http://127.0.0.1:3001/healthz
+#
+services:
+  render:
+    build:
+      context: .
+      dockerfile: Dockerfile.render
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      # 统一 data_root；宿主机写、容器只读。勿挂载 config.yaml
+      - ./data:/data:ro
+    ports:
+      - "127.0.0.1:3001:3001"
+    environment:
+      RENDER_PORT: "3001"
+      RENDER_DATA_ROOT: "/data"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - render_internal
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+    mem_limit: 256m
+    pids_limit: 256
+
+networks:
+  render_internal:
+    driver: bridge
+    # 无出网默认路由，降低 SSRF/回连价值；宿主机仍可通过 published port 访问
+    internal: true
