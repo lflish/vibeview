@@ -5,91 +5,952 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>vibeview · 管理</title>
 <style>
-  body{margin:0;background:#1a1a1a;color:#eee;font-family:system-ui,sans-serif;}
-  header{display:flex;align-items:center;justify-content:space-between;
-         padding:16px 24px;background:#262626;border-bottom:1px solid #333;}
-  header h1{margin:0;font-size:18px;}
-  header form{margin:0;}
-  .btn{padding:8px 14px;border:0;border-radius:6px;cursor:pointer;font-size:13px;}
-  .logout{background:#444;color:#eee;}
-  .del{background:#c0392b;color:#fff;}
-  main{padding:24px;}
-  table{width:100%;border-collapse:collapse;font-size:14px;}
-  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #333;}
-  th{color:#999;font-weight:600;}
-  a{color:#4f8cff;text-decoration:none;}
-  a:hover{text-decoration:underline;}
-  .tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;background:#333;}
-  .empty{color:#888;padding:40px;text-align:center;}
+  :root {
+    --bg: #1a1a1a;
+    --panel: #262626;
+    --panel2: #2e2e2e;
+    --border: #3a3a3a;
+    --text: #eee;
+    --muted: #999;
+    --accent: #4f8cff;
+    --accent-hover: #3a78ee;
+    --danger: #c0392b;
+    --danger-hover: #a93226;
+    --ok: #2ecc71;
+    --warn: #f0ad4e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 14px 20px; background: var(--panel); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 20;
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: .02em; }
+  header .meta { color: var(--muted); font-size: 12px; margin-left: 8px; font-weight: 400; }
+  header .right { display: flex; align-items: center; gap: 8px; }
+  header form { margin: 0; }
+  .btn {
+    padding: 7px 12px; border: 0; border-radius: 6px; cursor: pointer; font-size: 13px;
+    background: #444; color: var(--text); white-space: nowrap; line-height: 1.3;
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; filter: none; }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); }
+  .btn-accent { background: var(--accent); color: #fff; }
+  .btn-accent:hover { background: var(--accent-hover); filter: none; }
+  .btn-del { background: var(--danger); color: #fff; }
+  .btn-del:hover { background: var(--danger-hover); filter: none; }
+  .btn-sm { padding: 5px 9px; font-size: 12px; }
+  .btn-icon { padding: 5px 8px; min-width: 32px; }
+  main { padding: 16px 20px 32px; max-width: 1200px; margin: 0 auto; }
+
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    margin-bottom: 14px; padding: 12px; background: var(--panel); border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+  .search-wrap { flex: 1 1 200px; min-width: 160px; position: relative; }
+  .search-wrap input {
+    width: 100%; padding: 8px 32px 8px 12px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--bg); color: var(--text); font-size: 14px;
+  }
+  .search-wrap input:focus { outline: none; border-color: var(--accent); }
+  .search-wrap .clear {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    background: transparent; border: 0; color: var(--muted); cursor: pointer;
+    padding: 4px 6px; font-size: 14px; display: none;
+  }
+  .search-wrap.has-value .clear { display: block; }
+  .filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .chip {
+    padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border);
+    background: transparent; color: var(--muted); font-size: 12px; cursor: pointer;
+  }
+  .chip:hover { border-color: #555; color: var(--text); }
+  .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  select.sort {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text); font-size: 13px;
+  }
+  .stats { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
+
+  .table-wrap {
+    overflow-x: auto; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--panel);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 720px; }
+  th, td { padding: 11px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  th {
+    color: var(--muted); font-weight: 600; font-size: 12px; text-transform: none;
+    background: var(--panel2); position: sticky; top: 0; user-select: none; white-space: nowrap;
+  }
+  th.sortable { cursor: pointer; }
+  th.sortable:hover { color: var(--text); }
+  th .arrow { opacity: .35; margin-left: 4px; font-size: 10px; }
+  th.sorted .arrow { opacity: 1; color: var(--accent); }
+  tbody tr:hover { background: rgba(79,140,255,.06); }
+  tbody tr:last-child td { border-bottom: 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .name-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .name-cell a { font-weight: 500; word-break: break-all; }
+  .name-cell .id { font-size: 11px; color: var(--muted); font-family: ui-monospace, monospace; }
+  .tag {
+    display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px;
+    background: #333; color: #ccc; font-weight: 500;
+  }
+  .tag-html { background: #2a3a55; color: #8bb4ff; }
+  .tag-image { background: #2a4a35; color: #7dcea0; }
+  .tag-video { background: #4a3a2a; color: #f5b041; }
+  .ops { display: flex; gap: 6px; flex-wrap: wrap; }
+  .size, .source, .time { color: #ccc; white-space: nowrap; }
+  .source { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+
+  .state {
+    padding: 48px 20px; text-align: center; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+  }
+  .state.hidden { display: none; }
+  .state .icon { font-size: 28px; margin-bottom: 10px; opacity: .7; }
+  .state p { margin: 0 0 6px; font-size: 15px; color: #bbb; }
+  .state .hint { font-size: 13px; }
+  .spinner {
+    width: 28px; height: 28px; margin: 0 auto 12px; border: 3px solid #444;
+    border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .pager {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+    margin-top: 14px; color: var(--muted); font-size: 13px;
+  }
+  .pager .pages { display: flex; gap: 6px; align-items: center; }
+  .pager .page-num { color: var(--text); font-variant-numeric: tabular-nums; }
+
+  /* toast */
+  #toasts {
+    position: fixed; bottom: 20px; right: 20px; z-index: 100;
+    display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+  }
+  .toast {
+    pointer-events: auto; min-width: 200px; max-width: 360px;
+    padding: 12px 14px; border-radius: 8px; background: #333; color: #fff;
+    border: 1px solid var(--border); box-shadow: 0 8px 24px rgba(0,0,0,.35);
+    font-size: 13px; animation: slideIn .2s ease;
+  }
+  .toast.ok { border-left: 3px solid var(--ok); }
+  .toast.err { border-left: 3px solid #e74c3c; }
+  .toast.info { border-left: 3px solid var(--accent); }
+  @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* modal */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 50;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .modal-backdrop.hidden { display: none; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px; width: 100%; max-width: 400px; box-shadow: 0 16px 40px rgba(0,0,0,.45);
+  }
+  .modal h2 { margin: 0 0 8px; font-size: 16px; }
+  .modal p { margin: 0 0 16px; color: #bbb; font-size: 14px; line-height: 1.5; word-break: break-all; }
+  .modal .actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+  @media (max-width: 640px) {
+    header { padding: 12px 14px; }
+    main { padding: 12px 12px 28px; }
+    .toolbar { padding: 10px; }
+    .stats { margin-left: 0; width: 100%; }
+    /* card-like rows on narrow screens via stacked cells still in table scroll */
+    th:nth-child(4), td:nth-child(4) { display: none; } /* hide source on very small */
+    #toasts { left: 12px; right: 12px; bottom: 12px; }
+    .toast { max-width: none; }
+  }
+
+  .tabs {
+    display: flex; gap: 4px; margin-bottom: 14px;
+    border-bottom: 1px solid var(--border); padding-bottom: 0;
+  }
+  .tab {
+    padding: 8px 14px; border: 0; background: transparent; color: var(--muted);
+    font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .panel.hidden { display: none; }
+  .acct-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px; margin-bottom: 8px;
+  }
+  .acct-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .acct-card .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .acct-card .name { font-weight: 600; font-size: 15px; word-break: break-all; }
+  .badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+  }
+  .badge-ok { background: #1e3a2a; color: #7dcea0; }
+  .badge-off { background: #3a2020; color: #e74c3c; }
+  .badge-orphan { background: #333; color: #aaa; }
+  .acct-meta { font-size: 12px; color: var(--muted); line-height: 1.55; }
+  .acct-meta strong { color: #ccc; font-weight: 500; }
+  .bar {
+    height: 6px; background: #333; border-radius: 3px; overflow: hidden; margin-top: 4px;
+  }
+  .bar > i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+  .bar.warn > i { background: var(--warn); }
+  .bar.danger > i { background: #e74c3c; }
+  .acct-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 </style>
 </head>
 <body>
   <header>
-    <h1>vibeview 管理端</h1>
-    <form method="post" action="/admin/logout"><button class="btn logout">退出登录</button></form>
+    <div>
+      <h1>vibeview 管理端 <span class="meta" id="hdr-count"></span></h1>
+    </div>
+    <div class="right">
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-refresh" title="刷新列表">刷新</button>
+      <form method="post" action="/admin/logout"><button class="btn btn-sm" type="submit">退出登录</button></form>
+    </div>
   </header>
+
   <main>
-    <table id="tbl">
-      <thead>
-        <tr><th>文件名</th><th>类型</th><th>大小</th><th>来源</th><th>上传时间</th><th>操作</th></tr>
-      </thead>
-      <tbody id="rows"></tbody>
-    </table>
-    <div class="empty" id="empty" style="display:none">暂无上传内容</div>
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab active" data-panel="resources" role="tab">资源</button>
+      <button type="button" class="tab" data-panel="accounts" role="tab">账户</button>
+    </div>
+
+    <div class="panel" id="panel-resources">
+    <div class="toolbar">
+      <div class="search-wrap" id="search-wrap">
+        <input type="search" id="q" placeholder="搜索文件名、来源、ID…" autocomplete="off">
+        <button type="button" class="clear" id="q-clear" aria-label="清除">×</button>
+      </div>
+      <div class="filters" id="type-filters" role="group" aria-label="类型筛选">
+        <button type="button" class="chip active" data-type="">全部</button>
+        <button type="button" class="chip" data-type="html">HTML</button>
+        <button type="button" class="chip" data-type="image">图片</button>
+        <button type="button" class="chip" data-type="video">视频</button>
+      </div>
+      <select class="sort" id="source-filter" title="按来源筛选">
+        <option value="">全部来源</option>
+      </select>
+      <select class="sort" id="sort" title="排序">
+        <option value="time-desc">时间 ↓ 新到旧</option>
+        <option value="time-asc">时间 ↑ 旧到新</option>
+        <option value="name-asc">文件名 A→Z</option>
+        <option value="name-desc">文件名 Z→A</option>
+        <option value="size-desc">大小 ↓</option>
+        <option value="size-asc">大小 ↑</option>
+      </select>
+      <span class="stats" id="stats"></span>
+    </div>
+
+    <div class="state" id="loading">
+      <div class="spinner"></div>
+      <p>加载中…</p>
+    </div>
+    <div class="state hidden" id="error">
+      <div class="icon">!</div>
+      <p id="error-msg">加载失败</p>
+      <p class="hint"><button type="button" class="btn btn-accent btn-sm" id="btn-retry">重试</button></p>
+    </div>
+    <div class="state hidden" id="empty">
+      <div class="icon">∅</div>
+      <p>暂无上传内容</p>
+      <p class="hint">通过上传接口或 Skill 上传后，会出现在这里</p>
+    </div>
+    <div class="state hidden" id="empty-filter">
+      <div class="icon">⌕</div>
+      <p>没有匹配的结果</p>
+      <p class="hint"><button type="button" class="btn btn-ghost btn-sm" id="btn-reset-filter">清除筛选</button></p>
+    </div>
+
+    <div class="table-wrap hidden" id="table-wrap">
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="name">文件名 <span class="arrow">↕</span></th>
+            <th class="sortable" data-sort="type">类型 <span class="arrow">↕</span></th>
+            <th class="sortable" data-sort="size">大小 <span class="arrow">↕</span></th>
+            <th class="sortable" data-sort="source">来源 <span class="arrow">↕</span></th>
+            <th class="sortable sorted" data-sort="time">上传时间 <span class="arrow">↓</span></th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+
+    <div class="pager hidden" id="pager">
+      <span id="pager-info"></span>
+      <div class="pages">
+        <button type="button" class="btn btn-ghost btn-sm" id="prev">上一页</button>
+        <span class="page-num" id="page-num"></span>
+        <button type="button" class="btn btn-ghost btn-sm" id="next">下一页</button>
+      </div>
+    </div>
+    </div><!-- /panel-resources -->
+
+    <div class="panel hidden" id="panel-accounts">
+      <div class="toolbar">
+        <span class="stats" id="acct-stats" style="margin-left:0">账户 = 上传 token（name）</span>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-acct-refresh" style="margin-left:auto">刷新</button>
+      </div>
+      <div class="state" id="acct-loading">
+        <div class="spinner"></div>
+        <p>加载账户…</p>
+      </div>
+      <div class="state hidden" id="acct-error">
+        <div class="icon">!</div>
+        <p id="acct-error-msg">加载失败</p>
+        <p class="hint"><button type="button" class="btn btn-accent btn-sm" id="btn-acct-retry">重试</button></p>
+      </div>
+      <div class="state hidden" id="acct-empty">
+        <div class="icon">∅</div>
+        <p>尚未配置账户</p>
+        <p class="hint">在 config.yaml 的 tokens 列表中添加 name + token</p>
+      </div>
+      <div class="acct-grid hidden" id="acct-grid"></div>
+    </div>
   </main>
-  <script>
-    function fmtSize(n){
-      if(n<1024) return n+' B';
-      if(n<1048576) return (n/1024).toFixed(1)+' KB';
-      return (n/1048576).toFixed(1)+' MB';
+
+  <div id="toasts" aria-live="polite"></div>
+
+  <div class="modal-backdrop hidden" id="del-modal" role="dialog" aria-modal="true" aria-labelledby="del-title">
+    <div class="modal">
+      <h2 id="del-title">确认删除</h2>
+      <p id="del-body">确定要删除该文件吗？此操作不可恢复。</p>
+      <div class="actions">
+        <button type="button" class="btn btn-ghost" id="del-cancel">取消</button>
+        <button type="button" class="btn btn-del" id="del-ok">删除</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  const PAGE_SIZE = 20;
+  const TYPE_LABEL = { html: 'HTML', image: '图片', video: '视频' };
+
+  let allItems = [];
+  let typeFilter = '';
+  let sourceFilter = '';
+  let query = '';
+  let sortKey = 'time-desc';
+  let page = 1;
+  let pendingDelete = null;
+
+  const $ = (id) => document.getElementById(id);
+  const el = {
+    loading: $('loading'),
+    error: $('error'),
+    errorMsg: $('error-msg'),
+    empty: $('empty'),
+    emptyFilter: $('empty-filter'),
+    tableWrap: $('table-wrap'),
+    rows: $('rows'),
+    pager: $('pager'),
+    pagerInfo: $('pager-info'),
+    pageNum: $('page-num'),
+    prev: $('prev'),
+    next: $('next'),
+    stats: $('stats'),
+    hdrCount: $('hdr-count'),
+    q: $('q'),
+    qClear: $('q-clear'),
+    searchWrap: $('search-wrap'),
+    sourceFilter: $('source-filter'),
+    sort: $('sort'),
+    toasts: $('toasts'),
+    delModal: $('del-modal'),
+    delBody: $('del-body'),
+    delOk: $('del-ok'),
+    delCancel: $('del-cancel'),
+  };
+
+  function fmtSize(n) {
+    n = Number(n) || 0;
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1048576).toFixed(1) + ' MB';
+  }
+  function fmtTime(s) {
+    try {
+      return new Date(s).toLocaleString('zh-CN', { hour12: false });
+    } catch {
+      return s || '-';
     }
-    function fmtTime(s){ try{return new Date(s).toLocaleString('zh-CN');}catch{return s;} }
-    function td(text){ const c=document.createElement('td'); c.textContent=text; return c; }
+  }
 
-    function rowFor(it){
-      const tr = document.createElement('tr');
+  function toast(msg, kind) {
+    const t = document.createElement('div');
+    t.className = 'toast ' + (kind || 'info');
+    t.textContent = msg;
+    el.toasts.appendChild(t);
+    setTimeout(() => {
+      t.style.opacity = '0';
+      t.style.transition = 'opacity .25s';
+      setTimeout(() => t.remove(), 250);
+    }, 2600);
+  }
 
-      const tdName = document.createElement('td');
-      const a = document.createElement('a');
-      a.href = it.url; a.target = '_blank'; a.rel = 'noopener';
-      a.textContent = it.filename;
-      tdName.appendChild(a);
-      tr.appendChild(tdName);
+  function showOnly(which) {
+    ['loading', 'error', 'empty', 'emptyFilter', 'tableWrap', 'pager'].forEach((k) => {
+      const node = el[k];
+      if (!node) return;
+      const on = which === k || (which === 'table' && (k === 'tableWrap' || k === 'pager'));
+      node.classList.toggle('hidden', !on);
+    });
+  }
 
-      const tdType = document.createElement('td');
-      const tag = document.createElement('span');
-      tag.className = 'tag'; tag.textContent = it.type;
-      tdType.appendChild(tag);
-      tr.appendChild(tdType);
+  function filtered() {
+    const q = query.trim().toLowerCase();
+    let list = allItems.slice();
+    if (typeFilter) list = list.filter((it) => it.type === typeFilter);
+    if (sourceFilter) list = list.filter((it) => (it.source || '') === sourceFilter);
+    if (q) {
+      list = list.filter((it) => {
+        const hay = [it.filename, it.source, it.id, it.type, it.url]
+          .map((x) => String(x || '').toLowerCase())
+          .join(' ');
+        return hay.includes(q);
+      });
+    }
+    const [field, dir] = sortKey.split('-');
+    const mul = dir === 'asc' ? 1 : -1;
+    list.sort((a, b) => {
+      let cmp = 0;
+      if (field === 'time') cmp = new Date(a.createdAt) - new Date(b.createdAt);
+      else if (field === 'size') cmp = (a.size || 0) - (b.size || 0);
+      else if (field === 'name') cmp = String(a.filename || '').localeCompare(String(b.filename || ''), 'zh');
+      else if (field === 'type') cmp = String(a.type || '').localeCompare(String(b.type || ''));
+      else if (field === 'source') cmp = String(a.source || '').localeCompare(String(b.source || ''), 'zh');
+      return cmp * mul;
+    });
+    return list;
+  }
 
-      tr.appendChild(td(fmtSize(it.size)));
-      tr.appendChild(td(it.source || '-'));
-      tr.appendChild(td(fmtTime(it.createdAt)));
+  function updateSourceOptions() {
+    const sources = [...new Set(allItems.map((it) => it.source).filter(Boolean))].sort((a, b) =>
+      a.localeCompare(b, 'zh')
+    );
+    const cur = el.sourceFilter.value;
+    el.sourceFilter.innerHTML = '<option value="">全部来源</option>';
+    for (const s of sources) {
+      const opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = s;
+      el.sourceFilter.appendChild(opt);
+    }
+    if (sources.includes(cur)) el.sourceFilter.value = cur;
+    else {
+      sourceFilter = '';
+      el.sourceFilter.value = '';
+    }
+  }
 
-      const tdOp = document.createElement('td');
-      const btn = document.createElement('button');
-      btn.className = 'btn del'; btn.textContent = '删除';
-      btn.onclick = () => del(it.id, it.filename);
-      tdOp.appendChild(btn);
-      tr.appendChild(tdOp);
+  function syncSortHeaders() {
+    const [field, dir] = sortKey.split('-');
+    document.querySelectorAll('th.sortable').forEach((th) => {
+      const k = th.dataset.sort;
+      const arrow = th.querySelector('.arrow');
+      const on = k === field || (k === 'time' && field === 'time') ||
+        (k === 'name' && field === 'name') || (k === 'size' && field === 'size') ||
+        (k === 'type' && field === 'type') || (k === 'source' && field === 'source');
+      th.classList.toggle('sorted', on);
+      if (arrow) arrow.textContent = on ? (dir === 'asc' ? '↑' : '↓') : '↕';
+    });
+  }
 
-      return tr;
+  async function copyUrl(url) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = url;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+      }
+      toast('预览链接已复制', 'ok');
+    } catch {
+      toast('复制失败，请手动复制', 'err');
+    }
+  }
+
+  function openDelete(it) {
+    pendingDelete = it;
+    el.delBody.textContent = '确定删除「' + (it.filename || it.id) + '」？此操作不可恢复。';
+    el.delModal.classList.remove('hidden');
+    el.delOk.focus();
+  }
+  function closeDelete() {
+    pendingDelete = null;
+    el.delModal.classList.add('hidden');
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    const it = pendingDelete;
+    el.delOk.disabled = true;
+    try {
+      const r = await fetch('/admin/api/item/' + encodeURIComponent(it.id), { method: 'DELETE' });
+      if (r.status === 401) {
+        toast('登录已过期，请重新登录', 'err');
+        setTimeout(() => { location.href = '/admin/login'; }, 800);
+        return;
+      }
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || data.ok === false) throw new Error(data.error || '删除失败');
+      allItems = allItems.filter((x) => x.id !== it.id);
+      closeDelete();
+      toast('已删除 ' + (it.filename || it.id), 'ok');
+      updateSourceOptions();
+      render();
+    } catch (e) {
+      toast(e.message || '删除失败', 'err');
+    } finally {
+      el.delOk.disabled = false;
+    }
+  }
+
+  function rowFor(it) {
+    const tr = document.createElement('tr');
+
+    const tdName = document.createElement('td');
+    const wrap = document.createElement('div');
+    wrap.className = 'name-cell';
+    const a = document.createElement('a');
+    a.href = it.url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = it.filename || '(无文件名)';
+    const idLine = document.createElement('span');
+    idLine.className = 'id';
+    idLine.textContent = it.id;
+    wrap.appendChild(a);
+    wrap.appendChild(idLine);
+    tdName.appendChild(wrap);
+    tr.appendChild(tdName);
+
+    const tdType = document.createElement('td');
+    const tag = document.createElement('span');
+    tag.className = 'tag tag-' + (it.type || '');
+    tag.textContent = TYPE_LABEL[it.type] || it.type || '-';
+    tdType.appendChild(tag);
+    tr.appendChild(tdType);
+
+    const tdSize = document.createElement('td');
+    tdSize.className = 'size';
+    tdSize.textContent = fmtSize(it.size);
+    tr.appendChild(tdSize);
+
+    const tdSrc = document.createElement('td');
+    tdSrc.className = 'source';
+    tdSrc.textContent = it.source || '-';
+    tdSrc.title = it.source || '';
+    tr.appendChild(tdSrc);
+
+    const tdTime = document.createElement('td');
+    tdTime.className = 'time';
+    tdTime.textContent = fmtTime(it.createdAt);
+    tr.appendChild(tdTime);
+
+    const tdOp = document.createElement('td');
+    const ops = document.createElement('div');
+    ops.className = 'ops';
+
+    const btnCopy = document.createElement('button');
+    btnCopy.type = 'button';
+    btnCopy.className = 'btn btn-ghost btn-sm';
+    btnCopy.textContent = '复制链接';
+    btnCopy.onclick = () => copyUrl(it.url);
+
+    const btnOpen = document.createElement('a');
+    btnOpen.className = 'btn btn-ghost btn-sm';
+    btnOpen.href = it.url;
+    btnOpen.target = '_blank';
+    btnOpen.rel = 'noopener';
+    btnOpen.textContent = '打开';
+    btnOpen.style.textDecoration = 'none';
+
+    const btnDel = document.createElement('button');
+    btnDel.type = 'button';
+    btnDel.className = 'btn btn-del btn-sm';
+    btnDel.textContent = '删除';
+    btnDel.onclick = () => openDelete(it);
+
+    ops.appendChild(btnCopy);
+    ops.appendChild(btnOpen);
+    ops.appendChild(btnDel);
+    tdOp.appendChild(ops);
+    tr.appendChild(tdOp);
+
+    return tr;
+  }
+
+  function render() {
+    const list = filtered();
+    const totalAll = allItems.length;
+    el.hdrCount.textContent = totalAll ? '· ' + totalAll + ' 项' : '';
+
+    const hasFilter = !!(typeFilter || sourceFilter || query.trim());
+    if (!totalAll) {
+      showOnly('empty');
+      el.stats.textContent = '';
+      syncSortHeaders();
+      return;
+    }
+    if (!list.length) {
+      showOnly('emptyFilter');
+      el.stats.textContent = '0 / ' + totalAll;
+      syncSortHeaders();
+      return;
     }
 
-    async function load(){
+    const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+    if (page > pages) page = pages;
+    if (page < 1) page = 1;
+    const start = (page - 1) * PAGE_SIZE;
+    const slice = list.slice(start, start + PAGE_SIZE);
+
+    el.rows.replaceChildren();
+    for (const it of slice) el.rows.appendChild(rowFor(it));
+
+    el.stats.textContent = hasFilter
+      ? '显示 ' + list.length + ' / 共 ' + totalAll
+      : '共 ' + totalAll + ' 项';
+    el.pagerInfo.textContent =
+      '第 ' + (start + 1) + '–' + (start + slice.length) + ' 项，共 ' + list.length + ' 项';
+    el.pageNum.textContent = page + ' / ' + pages;
+    el.prev.disabled = page <= 1;
+    el.next.disabled = page >= pages;
+
+    showOnly('table');
+    syncSortHeaders();
+  }
+
+  async function load() {
+    showOnly('loading');
+    try {
       const r = await fetch('/admin/api/list');
-      const { items } = await r.json();
-      const tbody = document.getElementById('rows');
-      tbody.replaceChildren();
-      document.getElementById('empty').style.display = items.length ? 'none' : 'block';
-      for(const it of items) tbody.appendChild(rowFor(it));
+      if (r.status === 401) {
+        location.href = '/admin/login';
+        return;
+      }
+      if (!r.ok) throw new Error('请求失败 (' + r.status + ')');
+      const data = await r.json();
+      allItems = Array.isArray(data.items) ? data.items : [];
+      updateSourceOptions();
+      page = 1;
+      render();
+    } catch (e) {
+      el.errorMsg.textContent = e.message || '加载失败';
+      showOnly('error');
     }
-    async function del(id, name){
-      if(!confirm('确认删除 '+name+' ?')) return;
-      await fetch('/admin/api/item/'+id, { method:'DELETE' });
-      load();
+  }
+
+  // events
+  let qTimer = null;
+  el.q.addEventListener('input', () => {
+    clearTimeout(qTimer);
+    qTimer = setTimeout(() => {
+      query = el.q.value;
+      el.searchWrap.classList.toggle('has-value', !!query);
+      page = 1;
+      render();
+    }, 150);
+  });
+  el.qClear.addEventListener('click', () => {
+    el.q.value = '';
+    query = '';
+    el.searchWrap.classList.remove('has-value');
+    page = 1;
+    render();
+    el.q.focus();
+  });
+
+  document.getElementById('type-filters').addEventListener('click', (e) => {
+    const btn = e.target.closest('.chip');
+    if (!btn) return;
+    typeFilter = btn.dataset.type || '';
+    document.querySelectorAll('#type-filters .chip').forEach((c) => {
+      c.classList.toggle('active', c === btn);
+    });
+    page = 1;
+    render();
+  });
+
+  el.sourceFilter.addEventListener('change', () => {
+    sourceFilter = el.sourceFilter.value;
+    page = 1;
+    render();
+  });
+
+  el.sort.addEventListener('change', () => {
+    sortKey = el.sort.value;
+    page = 1;
+    render();
+  });
+
+  document.querySelectorAll('th.sortable').forEach((th) => {
+    th.addEventListener('click', () => {
+      const field = th.dataset.sort;
+      const map = { time: 'time', name: 'name', size: 'size', type: 'type', source: 'source' };
+      const f = map[field];
+      if (!f) return;
+      const [curF, curD] = sortKey.split('-');
+      if (curF === f) sortKey = f + '-' + (curD === 'asc' ? 'desc' : 'asc');
+      else sortKey = f + '-' + (f === 'name' || f === 'source' || f === 'type' ? 'asc' : 'desc');
+      el.sort.value = sortKey;
+      page = 1;
+      render();
+    });
+  });
+
+  el.prev.addEventListener('click', () => { if (page > 1) { page--; render(); } });
+  el.next.addEventListener('click', () => { page++; render(); });
+  $('btn-refresh').addEventListener('click', () => load());
+  $('btn-retry').addEventListener('click', () => load());
+  $('btn-reset-filter').addEventListener('click', () => {
+    query = '';
+    typeFilter = '';
+    sourceFilter = '';
+    el.q.value = '';
+    el.searchWrap.classList.remove('has-value');
+    el.sourceFilter.value = '';
+    document.querySelectorAll('#type-filters .chip').forEach((c) => {
+      c.classList.toggle('active', c.dataset.type === '');
+    });
+    page = 1;
+    render();
+  });
+
+  el.delCancel.addEventListener('click', closeDelete);
+  el.delOk.addEventListener('click', confirmDelete);
+  el.delModal.addEventListener('click', (e) => {
+    if (e.target === el.delModal) closeDelete();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !el.delModal.classList.contains('hidden')) closeDelete();
+  });
+
+  // slash to focus search
+  document.addEventListener('keydown', (e) => {
+    if (e.key === '/' && !e.metaKey && !e.ctrlKey && document.activeElement !== el.q) {
+      const tag = (document.activeElement && document.activeElement.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      e.preventDefault();
+      el.q.focus();
     }
-    load();
-  </script>
+  });
+
+
+  // ---- 账户面板 ----
+  let accountsCache = [];
+  let accountsDefaults = { retentionDays: 7, maxSizeMb: 50 };
+  let accountsLoaded = false;
+
+  const acctEl = {
+    loading: $('acct-loading'),
+    error: $('acct-error'),
+    errorMsg: $('acct-error-msg'),
+    empty: $('acct-empty'),
+    grid: $('acct-grid'),
+    stats: $('acct-stats'),
+  };
+
+  function showAcctOnly(which) {
+    ['loading', 'error', 'empty', 'grid'].forEach((k) => {
+      const node = acctEl[k];
+      if (!node) return;
+      node.classList.toggle('hidden', which !== k);
+    });
+  }
+
+  function pctBar(used, limit) {
+    if (!limit || limit <= 0) return '';
+    const p = Math.min(100, Math.round((used / limit) * 100));
+    const cls = p >= 95 ? 'danger' : p >= 80 ? 'warn' : '';
+    return '<div class="bar ' + cls + '" title="' + p + '%"><i style="width:' + p + '%"></i></div>';
+  }
+
+  function filterByAccount(name) {
+    document.querySelectorAll('.tab').forEach((t) => {
+      t.classList.toggle('active', t.dataset.panel === 'resources');
+    });
+    $('panel-resources').classList.remove('hidden');
+    $('panel-accounts').classList.add('hidden');
+    sourceFilter = name;
+    el.sourceFilter.value = name;
+    page = 1;
+    render();
+  }
+
+  function renderAccounts() {
+    const list = accountsCache;
+    if (!list.length) {
+      showAcctOnly('empty');
+      acctEl.stats.textContent = '无账户';
+      return;
+    }
+    acctEl.grid.replaceChildren();
+    let totalBytes = 0;
+    let totalCount = 0;
+    for (const a of list) {
+      totalBytes += a.bytes || 0;
+      totalCount += a.count || 0;
+      const card = document.createElement('div');
+      card.className = 'acct-card';
+
+      const top = document.createElement('div');
+      top.className = 'top';
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = a.name;
+      const badge = document.createElement('span');
+      if (!a.configured) {
+        badge.className = 'badge badge-orphan';
+        badge.textContent = '已移除配置';
+      } else if (a.disabled) {
+        badge.className = 'badge badge-off';
+        badge.textContent = '已停用';
+      } else {
+        badge.className = 'badge badge-ok';
+        badge.textContent = '启用中';
+      }
+      top.appendChild(name);
+      top.appendChild(badge);
+      card.appendChild(top);
+
+      const meta = document.createElement('div');
+      meta.className = 'acct-meta';
+      const lines = [];
+      lines.push('资源 <strong>' + a.count + '</strong> 个 · <strong>' + fmtSize(a.bytes) + '</strong>');
+      if (a.maxFiles != null) {
+        lines.push('文件配额 ' + a.count + ' / ' + a.maxFiles);
+        lines.push(pctBar(a.count, a.maxFiles));
+      }
+      if (a.maxStorageMb != null) {
+        const lim = a.maxStorageMb * 1024 * 1024;
+        lines.push('容量配额 ' + fmtSize(a.bytes) + ' / ' + a.maxStorageMb + ' MB');
+        lines.push(pctBar(a.bytes, lim));
+      }
+      const ret = a.retentionDays != null ? a.retentionDays : accountsDefaults.retentionDays;
+      lines.push('保留 ' + (ret === 0 ? '不清理' : ret + ' 天') +
+        (a.retentionDays != null ? '（账户覆盖）' : '（全局）'));
+      meta.innerHTML = lines.join('<br>');
+      card.appendChild(meta);
+
+      const actions = document.createElement('div');
+      actions.className = 'acct-actions';
+      if (a.count > 0) {
+        const btnFilter = document.createElement('button');
+        btnFilter.type = 'button';
+        btnFilter.className = 'btn btn-ghost btn-sm';
+        btnFilter.textContent = '查看资源';
+        btnFilter.onclick = () => filterByAccount(a.name);
+        actions.appendChild(btnFilter);
+      }
+      if (a.configured) {
+        const btnToggle = document.createElement('button');
+        btnToggle.type = 'button';
+        btnToggle.className = 'btn btn-sm ' + (a.disabled ? 'btn-accent' : 'btn-del');
+        btnToggle.textContent = a.disabled ? '启用' : '停用';
+        btnToggle.onclick = () => toggleAccount(a, btnToggle);
+        actions.appendChild(btnToggle);
+      }
+      card.appendChild(actions);
+      acctEl.grid.appendChild(card);
+    }
+    acctEl.stats.textContent =
+      list.length + ' 个账户 · 共 ' + totalCount + ' 项 · ' + fmtSize(totalBytes);
+    showAcctOnly('grid');
+  }
+
+  async function toggleAccount(a, btn) {
+    const enable = !!a.disabled;
+    const path = '/admin/api/accounts/' + encodeURIComponent(a.name) + '/' + (enable ? 'enable' : 'disable');
+    btn.disabled = true;
+    try {
+      const r = await fetch(path, { method: 'POST' });
+      if (r.status === 401) {
+        toast('登录已过期，请重新登录', 'err');
+        setTimeout(() => { location.href = '/admin/login'; }, 800);
+        return;
+      }
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.ok) throw new Error(data.error || '操作失败');
+      a.disabled = data.disabled;
+      toast((enable ? '已启用 ' : '已停用 ') + a.name, 'ok');
+      renderAccounts();
+    } catch (e) {
+      toast(e.message || '操作失败', 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function loadAccounts(force) {
+    if (accountsLoaded && !force) {
+      renderAccounts();
+      return;
+    }
+    showAcctOnly('loading');
+    try {
+      const r = await fetch('/admin/api/accounts');
+      if (r.status === 401) {
+        location.href = '/admin/login';
+        return;
+      }
+      if (!r.ok) throw new Error('请求失败 (' + r.status + ')');
+      const data = await r.json();
+      accountsCache = Array.isArray(data.accounts) ? data.accounts : [];
+      accountsDefaults = data.defaults || accountsDefaults;
+      accountsLoaded = true;
+      // 补齐来源下拉（含尚无上传的已配置账户）
+      const cur = el.sourceFilter.value;
+      const fromItems = [...new Set(allItems.map((it) => it.source).filter(Boolean))];
+      const fromAccts = accountsCache.map((a) => a.name);
+      const sources = [...new Set(fromItems.concat(fromAccts))].sort((a, b) => a.localeCompare(b, 'zh'));
+      el.sourceFilter.innerHTML = '<option value="">全部来源</option>';
+      for (const s of sources) {
+        const opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s;
+        el.sourceFilter.appendChild(opt);
+      }
+      if (sources.includes(cur)) el.sourceFilter.value = cur;
+      renderAccounts();
+    } catch (e) {
+      acctEl.errorMsg.textContent = e.message || '加载失败';
+      showAcctOnly('error');
+    }
+  }
+
+  document.querySelectorAll('.tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t === tab));
+      const which = tab.dataset.panel;
+      $('panel-resources').classList.toggle('hidden', which !== 'resources');
+      $('panel-accounts').classList.toggle('hidden', which !== 'accounts');
+      if (which === 'accounts') loadAccounts(false);
+    });
+  });
+  $('btn-acct-refresh').addEventListener('click', () => loadAccounts(true));
+  $('btn-acct-retry').addEventListener('click', () => loadAccounts(true));
+
+  load();
+})();
+</script>
 </body>
 </html>
