@@ -1,11 +1,15 @@
 {
   "name": "dview",
   "version": "1.0.0",
-  "description": "通用预览服务：上传 HTML/图片/视频，渲染并返回随机预览链接",
+  "description": "\u901a\u7528\u9884\u89c8\u670d\u52a1\uff1a\u4e0a\u4f20 HTML/\u56fe\u7247/\u89c6\u9891\uff0c\u6e32\u67d3\u5e76\u8fd4\u56de\u968f\u673a\u9884\u89c8\u94fe\u63a5",
   "type": "commonjs",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "render": "node render-server.js",
+    "smoke:render": "bash scripts/smoke-render.sh",
+    "test": "bash scripts/smoke.sh",
+    "smoke": "bash scripts/smoke.sh"
   },
   "dependencies": {
     "express": "^4.21.2",
@@ -13,5 +17,31 @@
     "js-yaml": "^4.1.0",
     "multer": "^2.2.0",
     "nanoid": "^3.3.8"
-  }
+  },
+  "bin": {
+    "dview": "bin/dview"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "views/",
+    "skill/",
+    "command/",
+    "server.js",
+    "config.example.yaml",
+    "install-skill.sh",
+    "AGENTS.md",
+    "docs/",
+    "examples/",
+    "render-server.js",
+    "Dockerfile.render",
+    "docker-compose.yml",
+    "scripts/"
+  ],
+  "keywords": [
+    "preview",
+    "html",
+    "upload",
+    "cli"
+  ]
 }
