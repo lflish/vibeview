@@ -33,6 +33,7 @@ echo "DVIEW_URL=${DVIEW_URL:-<未设置>}"; echo "DVIEW_TOKEN=${DVIEW_TOKEN:+<�
 - 完整 `<!DOCTYPE html>` 结构,包含 `<head>`(设置 `charset=utf-8` 和 viewport)
 - CSS 内联在 `<style>` 中;如需图表优先用 CDN(如 Chart.js、ECharts)或纯 CSS/SVG,避免依赖本地资源
 - 中文内容确保字体和排版正常
+- 未指定风格时默认浅色：浅灰背景（`#f6f8fb`）、白色卡片、深色正文（`#1e293b`）、蓝色强调（`#2563eb`）。有主题切换时提供「浅色 / 深色 / 跟随系统」，首次默认浅色并记住选择；遵循用户明确指定的其他风格。
 - 视觉清晰、可直接在浏览器打开,无需额外文件
 - 写入临时文件:`/tmp/dview-<简短英文名>-<时间戳>.html`
 

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>vibeview · 管理</title>
+<script src="/admin/theme.js"></script>
 <style>
   :root {
     --bg: #1a1a1a;
@@ -206,6 +207,7 @@
   .bar.danger > i { background: #e74c3c; }
   .acct-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 </style>
+<link rel="stylesheet" href="/admin/theme.css">
 </head>
 <body>
   <header>
@@ -213,6 +215,13 @@
       <h1>vibeview 管理端 <span class="meta" id="hdr-count"></span></h1>
     </div>
     <div class="right">
+      <label class="theme-picker" for="theme-select">主题
+        <select id="theme-select" aria-label="主题">
+          <option value="light">浅色</option>
+          <option value="dark">深色</option>
+          <option value="system">跟随系统</option>
+        </select>
+      </label>
       <button type="button" class="btn btn-ghost btn-sm" id="btn-refresh" title="刷新列表">刷新</button>
       <form method="post" action="/admin/logout"><button class="btn btn-sm" type="submit">退出登录</button></form>
     </div>

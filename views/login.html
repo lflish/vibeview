@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>vibeview · 登录</title>
+<script src="/admin/theme.js"></script>
 <style>
   :root {
     --bg: #1a1a1a;
@@ -64,9 +65,17 @@
   }
   .err.show { display: block; }
 </style>
+<link rel="stylesheet" href="/admin/theme.css">
 </head>
 <body>
   <form class="box" method="post" action="/admin/login" id="login-form">
+    <label class="theme-picker" for="theme-select">主题
+      <select id="theme-select" aria-label="主题">
+        <option value="light">浅色</option>
+        <option value="dark">深色</option>
+        <option value="system">跟随系统</option>
+      </select>
+    </label>
     <div class="brand">
       <div class="logo">vv</div>
       <h1>vibeview 管理端</h1>
