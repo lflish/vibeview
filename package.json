@@ -6,6 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "test:theme": "node scripts/test-theme.js",
     "render": "node render-server.js",
     "smoke:render": "bash scripts/smoke-render.sh",
     "test": "bash scripts/smoke.sh",

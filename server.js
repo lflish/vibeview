@@ -171,6 +171,12 @@ app.get('/healthz', (_req, res) => {
 });
 
 // ---- C. 管理端（session 登录） ----
+// Only expose these shared assets; login needs them before authentication.
+for (const asset of ['theme.css', 'theme.js']) {
+  app.get(`/admin/${asset}`, (_req, res) => {
+    res.sendFile(path.join(__dirname, 'views', asset));
+  });
+}
 app.use(
   session({
     secret: config.admin.sessionSecret,

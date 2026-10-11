@@ -2,6 +2,10 @@
 
 When you generate HTML, charts, screenshots, images, or short videos that the user should open in a browser, **upload them to vibeview** and return the preview URL instead of only leaving a local path.
 
+## Default style for generated pages
+
+When generating HTML pages, charts, or reports, default to a light theme: pale gray background (`#f6f8fb`), white surfaces, dark text (`#1e293b`), and blue accents (`#2563eb`). Follow explicit user styling requests or an existing design when provided. Preserve existing files when the task is only to upload them. See `skill/dview-upload/SKILL.md` for generation and theme preferences.
+
 ## Config
 
 Required env (ask the user / admin if missing):
