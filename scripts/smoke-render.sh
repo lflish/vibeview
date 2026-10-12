@@ -20,7 +20,11 @@ echo "== unit: preview-store path + id =="
 TMP="$(mktemp -d)"
 RENDER_PID=""
 PROXY_PID=""
+CID=""
+IMAGE=""
 cleanup() {
+  if [[ -n "$CID" ]]; then docker rm -f "$CID" >/dev/null 2>&1 || true; fi
+  if [[ -n "$IMAGE" ]]; then docker rmi "$IMAGE" >/dev/null 2>&1 || true; fi
   if [[ -n "${RENDER_PID}" ]] && kill -0 "$RENDER_PID" 2>/dev/null; then
     kill "$RENDER_PID" 2>/dev/null || true
     wait "$RENDER_PID" 2>/dev/null || true
@@ -54,6 +58,7 @@ fs.writeFileSync(
   path.join(root, 'meta', id + '.json'),
   JSON.stringify({
     id,
+    access: { mode: 'public' },
     type: 'html',
     filename: 'index.html',
     mime: 'text/html',
@@ -120,11 +125,14 @@ echo "== docker (optional) =="
 if command -v docker >/dev/null 2>&1; then
   IMAGE="vibeview-render-smoke-$$"
   docker build -f Dockerfile.render -t "$IMAGE" .
+  # Fixture contains no real data; make it readable by the image's non-root user.
+  chmod -R a+rX "$TMP"
   CID="$(docker run -d --read-only --tmpfs /tmp \
     -p 127.0.0.1:13093:3001 \
     -v "${TMP}:/data:ro" \
     -e RENDER_DATA_ROOT=/data \
     -e RENDER_PORT=3001 \
+    -e RENDER_GATEWAY_TOKEN=smoke-gateway-test \
     "$IMAGE")"
   for i in 1 2 3 4 5 6 7 8 9 10; do
     if curl -fsS "http://127.0.0.1:13093/healthz" >/dev/null 2>&1; then
@@ -134,9 +142,21 @@ if command -v docker >/dev/null 2>&1; then
   done
   curl -fsS "http://127.0.0.1:13093/healthz" | grep -q '"role":"render"'
   curl -fsS "http://127.0.0.1:13093/v/abcdefghijklmnop" | grep -q '<h1>ok</h1>'
+  TMP_DATA="$TMP" node <<'NODE'
+const fs = require('fs');
+const filename = process.env.TMP_DATA + '/meta/abcdefghijklmnop.json';
+const meta = JSON.parse(fs.readFileSync(filename));
+meta.access = { mode: 'code' };
+fs.writeFileSync(filename, JSON.stringify(meta));
+NODE
+  DENIED="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:13093/v/abcdefghijklmnop/raw)"
+  [[ "$DENIED" == "403" ]]
+  curl -fsS -H 'X-Preview-Gateway: smoke-gateway-test' "http://127.0.0.1:13093/v/abcdefghijklmnop" | grep -q '<h1>ok</h1>'
   docker stop "$CID" >/dev/null
   docker rm "$CID" >/dev/null
+  CID=""
   docker rmi "$IMAGE" >/dev/null || true
+  IMAGE=""
   echo "docker render ok"
 else
   echo "docker not installed; skipped container build (local checks passed)"

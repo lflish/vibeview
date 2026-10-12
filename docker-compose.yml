@@ -2,7 +2,8 @@
 # 并设置 preview.proxy_to_render: true
 #
 #   docker compose up -d --build
-#   curl -sS http://127.0.0.1:3001/healthz
+#   RENDER_HOST_PORT=3001 docker compose up -d --build
+#   curl -sS http://127.0.0.1:${RENDER_HOST_PORT:-3001}/healthz
 #
 services:
   render:
@@ -16,10 +17,12 @@ services:
       # 统一 data_root；宿主机写、容器只读。勿挂载 config.yaml
       - ./data:/data:ro
     ports:
-      - "127.0.0.1:3001:3001"
+      - "127.0.0.1:${RENDER_HOST_PORT:-3001}:3001"
     environment:
       RENDER_PORT: "3001"
       RENDER_DATA_ROOT: "/data"
+      # Main service uses the same DVIEW_RENDER_GATEWAY_TOKEN. Required for protected previews.
+      RENDER_GATEWAY_TOKEN: "${DVIEW_RENDER_GATEWAY_TOKEN:-}"
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -38,5 +41,5 @@ services:
 networks:
   render_internal:
     driver: bridge
-    # 无出网默认路由，降低 SSRF/回连价值；宿主机仍可通过 published port 访问
-    internal: true
+    # 端口只绑定到宿主机 loopback；保留 bridge 网络以支持 published port。
+    # 若部署环境支持 internal 网络的端口转发，可由运维侧再加固。

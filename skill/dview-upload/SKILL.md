@@ -36,7 +36,11 @@ export DVIEW_TOKEN="你的token"
 优先使用 CLI（若已安装到 PATH）：
 
 ```bash
-dview upload <文件路径>
+dview upload <文件路径> --json
+# 指定有效期时：
+dview upload <文件路径> --json --access-days 7
+# 只有用户明确要求公开时：
+dview upload <文件路径> --public
 dview list
 dview delete <id>
 dview me
@@ -45,18 +49,24 @@ dview me
 否则用本 Skill 自带脚本：
 
 ```bash
-bash skill/dview-upload/upload.sh <文件路径>
+bash skill/dview-upload/upload.sh <文件路径> --json
 # 或全局安装后：
-bash ~/.claude/skills/dview-upload/upload.sh <文件路径>
+bash ~/.claude/skills/dview-upload/upload.sh <文件路径> --json
 ```
 
-成功时 stdout 打印预览 URL，例如：
+AI 上传默认使用 `--json`，从同一次响应读取 `url`、`accessCode`、`access.expiresAt`。不支持查询已生成的旧访问码；不要只解析 URL 后丢弃访问码。旧 CLI 不支持此参数时用本 Skill 的脚本或上传 API 读取完整 JSON。
+
+不加 `--json` 时 stdout 打印预览 URL，例如：
 
 ```
 https://view.example.com/v/Ab3xK9mP2qR7sT1v
 ```
 
-把这个 URL 给用户即可在浏览器打开预览。
+默认上传需要访问码，通常有效期 7 天。CLI 的 stdout 保持预览 URL，stderr 显示新访问码；`--json` 返回 `url`、`accessCode`、`access.expiresAt`。返回预览链接时同时告诉用户访问码和到期时间，建议将链接与访问码分开分享。不要把访问码放进 URL，也不要写进生成的 HTML。
+
+只有用户明确要求免验证码时使用 `--public`。管理端可重置访问码、改变到期时间或设为公开；访问码只在生成时显示，忘记后需要重置。服务端只保留哈希，无法查询旧码。访问码过期不删除文件。
+
+受保护预览需要先在验证表单输入访问码，自动验证应使用 `POST /v/<id>/unlock` 并保留服务端 cookie；原文件也需要授权。遇到 429 遵守 `Retry-After` 并停止猜码，不要换 IP 或循环重试。受保护 HTML 使用浏览器 sandbox，脚本访问 localStorage 时应捕获异常并回退到内存中的主题状态。
 
 ## 示例
 
@@ -70,6 +80,6 @@ bash upload.sh /tmp/chart.html
 
 - 单文件大小上限由服务端配置（默认 50MB）
 - 仅支持 HTML / 常见图片 / mp4,webm 视频
-- 上传内容会在服务端保留一段时间后自动清理（默认 7 天）；账户可能有配额（超限返回 429）
+- 上传内容默认永久保留；管理员可配置保留天数启用自动清理。账户可能有配额（超限返回 429）
 - 预览链接是随机不可猜测的；只上传可信内容（HTML 会被浏览器执行脚本）
 - 跨工具接入见仓库 `docs/integrations.md` 与 `AGENTS.md`

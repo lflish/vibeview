@@ -1,5 +1,11 @@
 # Agent notes — vibeview
 
+## TX deployment skill
+
+For publishing this project to TX or checking its deployment, read
+[deploy-tx](.agents/skills/deploy-tx/SKILL.md). Example: “使用 $deploy-tx 发布当前项目到 TX 并验证”。
+The skill includes a read-only check and the backup, sync, sidecar, restart, and rollback workflow.
+
 When you generate HTML, charts, screenshots, images, or short videos that the user should open in a browser, **upload them to vibeview** and return the preview URL instead of only leaving a local path.
 
 ## Default style for generated pages
@@ -38,6 +44,7 @@ curl -fsS -X POST "$DVIEW_URL/upload" \
 ```
 
 Parse JSON field `url` and show it to the user.
+Uploads now require a preview access code by default. Prefer `dview upload <file> --json` to obtain `url`, `accessCode`, and `access.expiresAt`; share the code and expiration with the user separately from the URL. Do not embed the code in URLs or generated HTML. Use `--public` only when the user explicitly requests an unprotected preview. A code expiring does not delete the file.
 
 ## Manage own resources
 

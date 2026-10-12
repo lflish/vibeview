@@ -134,6 +134,9 @@ preview:
   proxy_to_render: false
   render_url: "http://127.0.0.1:3001"
   proxy_timeout_ms: 30000
+access:
+  default_required: false
+  protect_legacy: false
 YAML
 
 export DVIEW_CONFIG_PATH="$TMP/config.yaml"
@@ -297,6 +300,38 @@ curl -s -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
 
 CODE="$(curl -s -b "$COOKIE_JAR" -o "$TMP/alist.json" -w '%{http_code}' "$BASE/admin/api/list")"
 assert_eq "$CODE" "200" "admin list with session"
+
+CODE="$(curl -s -b "$COOKIE_JAR" -o "$TMP/apage.json" -w '%{http_code}' \
+  "$BASE/admin/api/list?page=1&pageSize=1&q=${MARKER}&sort=time&order=desc")"
+assert_eq "$CODE" "200" "admin list server-side search + pagination"
+python3 - "$TMP/apage.json" "$MARKER" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+assert data["total"] >= 1, data
+assert len(data["items"]) == 1, data
+assert data["items"][0]["description"] == sys.argv[2], data
+assert data["pageSize"] == 1 and data["page"] == 1, data
+print("ok admin page", data["total"])
+PY
+ok "admin list returns description and paginated result"
+
+log "== 9a admin bulk delete =="
+curl -s -o "$TMP/bulk1.json" -w '%{http_code}' \
+  -H "Authorization: Bearer ${TOKEN_B}" \
+  -F "file=@${TMP}/fixtures/page.html" \
+  "$BASE/upload" >/dev/null
+ID_BULK_1="$(json_get "$TMP/bulk1.json" "['id']")"
+curl -s -o "$TMP/bulk2.json" -w '%{http_code}' \
+  -H "Authorization: Bearer ${TOKEN_B}" \
+  -F "file=@${TMP}/fixtures/page.html" \
+  "$BASE/upload" >/dev/null
+ID_BULK_2="$(json_get "$TMP/bulk2.json" "['id']")"
+CODE="$(curl -s -b "$COOKIE_JAR" -o "$TMP/bulk-delete.json" -w '%{http_code}' \
+  -X DELETE -H 'Content-Type: application/json' \
+  --data "{\"ids\":[\"$ID_BULK_1\",\"$ID_BULK_2\"]}" \
+  "$BASE/admin/api/items")"
+assert_eq "$CODE" "200" "admin bulk delete"
+assert_contains "$(cat "$TMP/bulk-delete.json")" '"deleted":2' "bulk delete count"
 
 CODE="$(curl -s -b "$COOKIE_JAR" -o "$TMP/dis.json" -w '%{http_code}' \
   -X POST "$BASE/admin/api/accounts/account-b/disable")"
