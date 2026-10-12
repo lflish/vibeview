@@ -3,6 +3,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const net = require('node:net');
+const http = require('node:http');
+const https = require('node:https');
 const { once } = require('node:events');
 const { spawn } = require('node:child_process');
 const { promisify } = require('node:util');
@@ -10,6 +12,7 @@ const execFile = promisify(require('node:child_process').execFile);
 const root = path.join(__dirname, '..');
 const children = [];
 const directories = [];
+const servers = [];
 async function port() {
   const s = net.createServer().listen(0, '127.0.0.1'); await once(s, 'listening');
   const n = s.address().port; await new Promise(resolve => s.close(resolve)); return n;
@@ -30,13 +33,30 @@ async function scenario(proxy) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'vibeview-access-')); directories.push(temp);
   const mainPort = await port(), renderPort = await port();
   const base = `http://127.0.0.1:${mainPort}`, render = `http://127.0.0.1:${renderPort}`;
+  let browserBase = base;
+  if (!proxy && process.argv.includes('--browser')) {
+    // Exercise the production topology: HTTPS termination in front of HTTP
+    // Express. This certificate and TLS bypass are only for the local fixture.
+    const key = path.join(temp, 'tls.key'), cert = path.join(temp, 'tls.crt');
+    await execFile('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+      '-subj', '/CN=localhost', '-keyout', key, '-out', cert]);
+    const frontend = https.createServer({ key: fs.readFileSync(key), cert: fs.readFileSync(cert) }, (req, res) => {
+      const upstream = http.request(base + req.url, { method: req.method, headers: { ...req.headers, 'x-forwarded-proto': 'https' } }, response => {
+        res.writeHead(response.statusCode, response.headers); response.pipe(res);
+      });
+      upstream.on('error', () => { res.writeHead(502); res.end(); });
+      req.pipe(upstream);
+    });
+    servers.push(frontend); frontend.listen(0, '127.0.0.1'); await once(frontend, 'listening');
+    browserBase = `https://127.0.0.1:${frontend.address().port}`;
+  }
   const data = path.join(temp, 'data'); fs.mkdirSync(path.join(data, 'meta'), { recursive: true });
   const legacy = 'Legacy0000000000';
   fs.mkdirSync(path.join(data, 'html', legacy), { recursive: true });
   fs.writeFileSync(path.join(data, 'html', legacy, 'page.html'), 'LEGACY SECRET');
   fs.writeFileSync(path.join(data, 'meta', legacy + '.json'), JSON.stringify({ id: legacy, type: 'html', filename: 'page.html', source: 'owner', createdAt: new Date().toISOString() }));
   const cfg = path.join(temp, 'config.json');
-  fs.writeFileSync(cfg, JSON.stringify({ server: { port: mainPort, base_url: base }, storage: { retention_days: 0 },
+  fs.writeFileSync(cfg, JSON.stringify({ server: { port: mainPort, base_url: browserBase }, storage: { retention_days: 0 },
     tokens: [{ name: 'owner', token: 'owner-token' }, { name: 'other', token: 'other-token' }],
     admin: { user: 'test', password: 'test-password', session_secret: 'test-secret' },
     preview: { proxy_to_render: proxy, render_url: render, gateway_token: 'private-test-gateway' } }));
@@ -57,6 +77,7 @@ async function scenario(proxy) {
   assert.ok(!fs.readFileSync(metaPath, 'utf8').includes(item.accessCode));
   const unlock = async (code, target = url, headers = {}) => request(target + '/unlock', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', ...headers }, body: new URLSearchParams({ code }) });
   let response = await request(url); assert.equal(response.status, 401);
+  assert.equal(response.headers.get('referrer-policy'), 'same-origin');
   assert.ok(!(await response.text()).includes('SENSITIVE TITLE'));
   assert.match(response.headers.get('cache-control'), /no-store/);
   for (const [mime, name] of [['image/png', 'private.png'], ['video/mp4', 'private.mp4']]) {
@@ -75,10 +96,12 @@ async function scenario(proxy) {
   assert.equal((await request(base + '/v/' + legacy)).status, 401);
   assert.equal((await unlock('wrong')).status, 403);
   assert.equal((await unlock(item.accessCode, url, { origin: 'https://untrusted.invalid' })).status, 403);
+  assert.equal((await unlock(item.accessCode, url, { origin: 'null' })).status, 403);
   response = await unlock(item.accessCode); assert.equal(response.status, 303);
   const grant = response.headers.get('set-cookie').split(';')[0];
   assert.match(response.headers.get('set-cookie'), /HttpOnly/); assert.match(response.headers.get('set-cookie'), /SameSite=Strict/);
   response = await request(url, { headers: { cookie: grant } }); assert.equal(response.status, 200);
+  assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
   assert.ok((await response.text()).includes('SECRET PAYLOAD'));
   assert.match(response.headers.get('content-security-policy'), /sandbox allow-scripts/);
   assert.ok(!response.headers.get('content-security-policy').includes('allow-same-origin'));
@@ -133,23 +156,52 @@ async function scenario(proxy) {
   const cliResult = JSON.parse(cli.stdout); assert.ok(cliResult.accessCode); assert.ok(Math.abs(Date.parse(cliResult.access.expiresAt) - Date.now() - 86400000) < 10000);
   const skill = await execFile('bash', ['skill/dview-upload/upload.sh', cliFile, '--json'], { cwd: root, env: { ...process.env, DVIEW_URL: base, DVIEW_TOKEN: 'owner-token' } });
   const skillResult = JSON.parse(skill.stdout); assert.ok(skillResult.url); assert.ok(skillResult.accessCode); assert.ok(skillResult.access.expiresAt);
-  if (!proxy && process.argv.includes('--browser')) await browserChecks(base, admin, legacy);
+  if (!proxy && process.argv.includes('--browser')) await browserChecks(base, browserBase, admin);
   console.log(`access integration (${proxy ? 'sidecar proxy' : 'local'}): defaults, hash privacy, raw/HEAD/Range, grants, reset, expiry, ownership, legacy, public, rate limit, CLI passed`);
 }
-async function browserChecks(base, admin, legacy) {
+async function browserChecks(base, browserBase, admin) {
   const { chromium } = require('playwright'); const browser = await chromium.launch({ headless: true });
   try {
-    const context = await browser.newContext(); const [name, ...value] = admin.split('=');
-    await context.addCookies([{ name, value: value.join('='), url: base, httpOnly: true }]);
+    const context = await browser.newContext({ ignoreHTTPSErrors: true }); const [name, ...value] = admin.split('=');
+    await context.addCookies([{ name, value: value.join('='), url: browserBase, httpOnly: true }]);
+    const fixtureForm = new FormData();
+    fixtureForm.append('file', new Blob(['<title>SENSITIVE TITLE</title><h1>SECRET PAYLOAD</h1>'], { type: 'text/html' }), 'browser-private.html');
+    const fixtureResponse = await request(base + '/upload', { method: 'POST', headers: { Authorization: 'Bearer owner-token' }, body: fixtureForm });
+    assert.equal(fixtureResponse.status, 200);
+    const fixture = await fixtureResponse.json();
     const page = await context.newPage(); const errors = []; page.on('pageerror', e => errors.push(e.message));
-    await page.goto(base + '/admin'); await page.waitForSelector('.btn-access');
-    await page.locator('.btn-access').first().click(); await page.locator('#access-reset').click();
+    await page.goto(browserBase + '/admin'); await page.waitForSelector('.btn-access');
+    const row = page.locator('#rows tr').filter({ has: page.locator('.id', { hasText: fixture.id }) });
+    await row.locator('.btn-access').click(); await page.locator('#access-reset').click();
     await page.waitForFunction(() => document.querySelector('#access-code').value.length === 12);
     const code = await page.locator('#access-code').inputValue();
-    const id = await page.locator('#rows .id').first().textContent();
-    const visitor = await browser.newContext(); const preview = await visitor.newPage();
-    await preview.goto(base + '/v/' + id); await preview.getByLabel('访问码', { exact: true }).fill(code); await preview.locator('button').click();
-    await preview.waitForFunction(() => !document.querySelector('input[name=code]'));
+    const id = fixture.id;
+    const visitor = await browser.newContext({ ignoreHTTPSErrors: true }); const preview = await visitor.newPage();
+    const previewUrl = browserBase + '/v/' + id;
+    await preview.goto(previewUrl);
+    // Reject null/external origins even with the right code.
+    for (const origin of ['null', 'https://untrusted.invalid']) {
+      const denied = await visitor.request.post(previewUrl + '/unlock', {
+        headers: { Origin: origin }, form: { code }, maxRedirects: 0,
+      });
+      assert.equal(denied.status(), 403);
+    }
+    // Invalid-code responses must also leave a usable form for retrying.
+    await preview.getByLabel('访问码', { exact: true }).fill('wrong');
+    const failure = preview.waitForResponse(r => r.url() === previewUrl + '/unlock');
+    await preview.locator('button').click(); assert.equal((await failure).status(), 403);
+    await preview.getByRole('alert').waitFor();
+    await preview.getByLabel('访问码', { exact: true }).fill(code);
+    const submitted = preview.waitForRequest(r => r.url() === previewUrl + '/unlock');
+    const unlocked = preview.waitForResponse(r => r.url() === previewUrl + '/unlock');
+    await preview.locator('button').click();
+    assert.equal((await submitted).headers().origin, browserBase);
+    assert.equal((await unlocked).status(), 303);
+    await preview.waitForURL(previewUrl);
+    assert.equal(await preview.title(), 'SENSITIVE TITLE');
+    assert.match(await preview.locator('body').innerText(), /SECRET PAYLOAD/);
+    const grantCookie = (await visitor.cookies(previewUrl)).find(c => c.name === 'dview_access');
+    assert.ok(grantCookie.secure); assert.ok(grantCookie.httpOnly); assert.equal(grantCookie.sameSite, 'Strict');
     await page.locator('#access-ttl').selectOption('1');
     await page.locator('#access-save').click();
     await page.waitForFunction(() => document.querySelector('#toasts').textContent.includes('有效期已更新'));
@@ -166,10 +218,11 @@ async function browserChecks(base, admin, legacy) {
     const upload = await request(base + '/upload', { method: 'POST', headers: { Authorization: 'Bearer owner-token' }, body: form }); const item = await upload.json();
     const unlock = await request(base + '/v/' + item.id + '/unlock', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ code: item.accessCode }) });
     const parts = unlock.headers.get('set-cookie').split(';')[0].split('=');
-    await context.addCookies([{ name: parts[0], value: parts.slice(1).join('='), url: base + '/v/' + item.id, httpOnly: true }]);
-    await page.goto(base + '/v/' + item.id);
+    await context.addCookies([{ name: parts[0], value: parts.slice(1).join('='), url: browserBase + '/v/' + item.id, httpOnly: true }]);
+    await page.goto(browserBase + '/v/' + item.id);
     assert.equal(await page.evaluate(() => window.probe), 'blocked');
-    console.log('access browser: admin reset/public controls, verification form, cleared code, opaque HTML isolation passed');
+    assert.deepEqual(errors, []);
+    console.log('access browser: HTTPS reverse proxy, form origin/retry/redirect, secure grant, admin controls, opaque HTML isolation passed');
   } finally { await browser.close(); }
 }
 async function missingGateway() {
@@ -192,6 +245,7 @@ async function missingGateway() {
   console.log('access integration: missing gateway credential denies protected content');
 }
 (async () => { try { await scenario(false); await scenario(true); await missingGateway(); } finally {
+  for (const server of servers) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   for (const child of children) if (child.exitCode === null) { const exited = once(child, 'exit'); child.kill(); await exited; }
   for (const dir of directories) fs.rmSync(dir, { recursive: true, force: true });
 } })().catch(e => { console.error(e); process.exitCode = 1; });
