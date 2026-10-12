@@ -43,6 +43,22 @@ Sharing and organizing a file should be as easy as generating it. Upload with `d
 
 ## Screenshots
 
+### An uploaded page in action
+
+[![An actual vibeview HTML preview with a light report, metric cards, and an interactive chart](docs/assets/preview-demo.png)](https://view.lflish.fun/v/xE7Gp8xUszMtVoph)
+
+[Open the interactive demo](https://view.lflish.fun/v/xE7Gp8xUszMtVoph) · **Access code:** `6kTR93sX9KaN` · **Expiration:** None · [HTML source](examples/preview-demo.html)
+
+This standalone HTML report was uploaded to vibeview and uses fictional data. Switch between **7 days / 30 days** to try the interaction. The screenshot comes from the deployed preview. The demo's code is specifically configured without expiration; ordinary uploads still default to 7 days.
+
+Upload the included example to your own service:
+
+```bash
+bash bin/dview upload examples/preview-demo.html --json
+```
+
+### Admin interface
+
 ![vibeview light admin UI with descriptions, access status, sources, and creation dates](docs/assets/admin-light.png)
 
 <p align="center"><sub>Actual admin UI, captured with isolated sample data. The interface is currently in Chinese.</sub></p>

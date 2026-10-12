@@ -43,6 +43,22 @@
 
 ## 界面预览
 
+### 上传后的页面效果
+
+[![vibeview 实际 HTML 预览：浅色报告、指标卡片与可切换时间范围的图表](docs/assets/preview-demo.png)](https://view.lflish.fun/v/xE7Gp8xUszMtVoph)
+
+[打开交互演示](https://view.lflish.fun/v/xE7Gp8xUszMtVoph) · **访问码：** `6kTR93sX9KaN` · **有效期：** 不过期 · [HTML 源文件](examples/preview-demo.html)
+
+这是一份通过 vibeview 上传并预览的单文件 HTML 报告，使用虚构数据。打开后可以切换 **7 days / 30 days**，体验页面交互；截图取自实际线上预览。演示专门设置了不过期访问码，普通上传仍默认有效期 7 天。
+
+也可以把仓库中的示例上传到自己的服务：
+
+```bash
+bash bin/dview upload examples/preview-demo.html --json
+```
+
+### 管理端
+
 ![vibeview 浅色管理界面：文件简介、访问状态、来源和创建时间](docs/assets/admin-light.png)
 
 <p align="center"><sub>实际管理界面，使用隔离的演示数据截图；截图中的名称与资源仅作示例。</sub></p>

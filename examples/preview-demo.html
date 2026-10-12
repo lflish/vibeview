@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="A self-contained vibeview demo report with fictional data and an interactive chart.">
+  <title>vibeview · Preview demo</title>
+  <style>
+    :root{color-scheme:light;--bg:#f6f8fb;--surface:#fff;--text:#1e293b;--muted:#64748b;--blue:#2563eb;--border:#e2e8f0}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .wrap{max-width:1080px;margin:auto;padding:28px 32px 24px}header{display:flex;align-items:center;justify-content:space-between;gap:16px}
+    .brand{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:750;letter-spacing:-.6px}.mark{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--blue);color:white;font-size:21px}
+    .tag{display:inline-flex;align-items:center;gap:7px;padding:4px 10px;border:1px solid var(--border);border-radius:20px;font-size:12px;background:white;color:var(--muted)}.dot{width:6px;height:6px;border-radius:50%;background:#2563eb}
+    .hero{padding:34px 0 25px}.eyebrow{color:var(--blue);font-size:11px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase}h1{margin:8px 0 6px;font-size:39px;line-height:1.25;letter-spacing:-1.5px}.hero p{margin:0;color:var(--muted);font-size:15px}
+    .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.card{background:var(--surface);border:1px solid var(--border);border-radius:14px}.metric{padding:17px 20px}.label{color:var(--muted);font-size:12px}.number{font-size:29px;font-weight:700;letter-spacing:-1px;line-height:1.5}.note{font-size:11px;color:var(--muted)}.blue{color:var(--blue)}
+    .grid{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(0,1fr);gap:18px;margin-top:18px}.chart{padding:20px 22px}.card-head{display:flex;justify-content:space-between;align-items:center;gap:10px}h2{margin:0;font-size:16px;font-weight:650}h3{margin:0;font-size:14px}.caption{margin:2px 0 0;color:var(--muted);font-size:12px}
+    .switch{display:flex;gap:3px;padding:3px;background:#f1f5f9;border:1px solid var(--border);border-radius:8px}button{font:inherit;font-size:11px;border:0;padding:5px 9px;background:transparent;color:var(--muted);border-radius:5px;cursor:pointer}button[aria-pressed=true]{background:white;color:var(--blue);box-shadow:0 1px 3px #1e293b15}button:focus-visible,a:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+    .plot{display:block;width:100%;height:auto;margin-top:14px}.chart-foot{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:11px;margin-top:4px}.legend{width:8px;height:8px;border-radius:3px;background:var(--blue)}
+    .share{padding:20px 22px;display:flex;flex-direction:column;justify-content:space-between;gap:18px}.lock{display:grid;place-items:center;width:42px;height:42px;background:#eff6ff;color:var(--blue);border-radius:12px;margin-bottom:14px}.share p{color:var(--muted);font-size:13px;margin:6px 0 0}.checks{padding:0;margin:0;list-style:none;font-size:12px}.checks li{padding:6px 0;display:flex;gap:9px}.check{color:#2563eb}.share small{font-size:11px;color:var(--muted);border-top:1px solid var(--border);padding-top:12px}
+    .recent{margin-top:18px;padding:18px 22px 7px}.table-scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;color:var(--muted);font-size:10px;font-weight:500;padding:13px 0 8px}td{padding:11px 0;border-top:1px solid #edf1f6;white-space:nowrap}td:first-child{font-weight:550}.type{display:inline-block;font-size:10px;padding:2px 7px;border-radius:4px;background:#eff6ff;color:var(--blue)}.type.image{background:#ecfdf5;color:#047857}.type.video{background:#fff7ed;color:#b45309}.source,.age{color:var(--muted)}.status{font-size:10px;color:var(--muted)}footer{display:flex;justify-content:space-between;gap:12px;margin-top:16px;font-size:11px;color:var(--muted)}a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
+    @media(max-width:720px){.wrap{padding:22px 18px}.hero{padding-top:28px}h1{font-size:30px;letter-spacing:-.8px}.metrics{grid-template-columns:repeat(2,1fr);gap:10px}.metric{padding:14px 16px}.grid{grid-template-columns:1fr}.chart,.share{padding:18px}.recent{padding:16px}table{min-width:460px}footer{flex-direction:column;gap:4px}.card-head{flex-wrap:wrap}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header><div class="brand"><span class="mark" aria-hidden="true">↗</span>vibeview</div><span class="tag"><span class="dot"></span>Preview demo · Sample data</span></header>
+    <section class="hero"><div class="eyebrow">From local file to shared idea</div><h1>Your work, one link away.</h1><p>A report, a chart, a prototype. Create it locally. Share it with vibeview.</p></section>
+    <section class="metrics" aria-label="Fictional report metrics">
+      <div class="card metric"><div class="label">Total previews</div><div class="number blue" id="total">48</div><div class="note" id="period">In the last 7 days</div></div>
+      <div class="card metric"><div class="label">HTML reports</div><div class="number" id="html-total">24</div><div class="note">Charts &amp; interactive pages</div></div>
+      <div class="card metric"><div class="label">Images</div><div class="number" id="image-total">18</div><div class="note">Screenshots &amp; design reviews</div></div>
+      <div class="card metric"><div class="label">Video demos</div><div class="number" id="video-total">6</div><div class="note">Walkthroughs &amp; short clips</div></div>
+    </section>
+    <div class="grid">
+      <section class="card chart">
+        <div class="card-head"><div><h2>A week of shared ideas</h2><p class="caption" id="chart-caption">Previews created each day · Fictional data</p></div><div class="switch" role="group" aria-label="Chart period"><button type="button" data-days="7" aria-pressed="true">7 days</button><button type="button" data-days="30" aria-pressed="false">30 days</button></div></div>
+        <svg class="plot" viewBox="0 0 600 215" role="img" aria-labelledby="chart-title chart-desc">
+          <title id="chart-title">Sample preview activity over 7 days</title><desc id="chart-desc">48 fictional previews: 4, 7, 6, 9, 5, 8, and 9 per day.</desc>
+          <defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#3b82f6" stop-opacity=".18"/><stop offset="1" stop-color="#3b82f6" stop-opacity=".01"/></linearGradient></defs>
+          <g stroke="#e8edf5" stroke-dasharray="4 5"><path d="M35 28H577M35 98H577M35 168H577"/></g>
+          <g fill="#94a3b8" font-size="10" font-family="system-ui"><text x="9" y="31" id="axis-max">10</text><text x="15" y="101" id="axis-mid">5</text><text x="15" y="171">0</text></g>
+          <path id="area" d="M35 112L125 70L215 84L305 42L395 98L485 56L575 42L575 168L35 168Z" fill="url(#fill)"/>
+          <path id="line" d="M35 112L125 70L215 84L305 42L395 98L485 56L575 42" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          <g id="dots" fill="white" stroke="#2563eb" stroke-width="2"><circle cx="35" cy="112" r="4"/><circle cx="125" cy="70" r="4"/><circle cx="215" cy="84" r="4"/><circle cx="305" cy="42" r="4"/><circle cx="395" cy="98" r="4"/><circle cx="485" cy="56" r="4"/><circle cx="575" cy="42" r="4"/></g>
+          <g id="labels" fill="#94a3b8" font-size="10" font-family="system-ui" text-anchor="middle"><text x="35" y="195">Mon</text><text x="125" y="195">Tue</text><text x="215" y="195">Wed</text><text x="305" y="195">Thu</text><text x="395" y="195">Fri</text><text x="485" y="195">Sat</text><text x="575" y="195">Sun</text></g>
+        </svg>
+        <div class="chart-foot"><span class="legend"></span>Try switching the period — this is a working HTML preview.</div>
+      </section>
+      <aside class="card share"><div><div class="lock" aria-hidden="true"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 10V7a5 5 0 0 1 10 0v3"/><rect x="4" y="10" width="16" height="12" rx="3"/><path d="M12 15v3"/></svg></div><h2>Share with confidence.</h2><p>This demo is shared with an access code. You control who can open a preview and how long the code stays valid.</p></div><ul class="checks"><li><span class="check">✓</span>Access-code verification</li><li><span class="check">✓</span>Original files protected too</li><li><span class="check">✓</span>Code expiration keeps the file</li></ul><small>Generated locally. Hosted on your server.</small></aside>
+    </div>
+    <section class="card recent"><div class="card-head"><h2>Recent previews</h2><span class="caption">Illustrative examples</span></div><div class="table-scroll"><table><thead><tr><th>FILE</th><th>TYPE</th><th>SOURCE</th><th>ACCESS</th><th>CREATED</th></tr></thead><tbody><tr><td>weekly-overview.html</td><td><span class="type">HTML</span></td><td class="source">claude-code</td><td class="status">Access code</td><td class="age">2 hours ago</td></tr><tr><td>product-review.png</td><td><span class="type image">IMAGE</span></td><td class="source">design</td><td class="status">Access code</td><td class="age">Yesterday</td></tr><tr><td>release-walkthrough.webm</td><td><span class="type video">VIDEO</span></td><td class="source">codex</td><td class="status">Access code</td><td class="age">3 days ago</td></tr></tbody></table></div></section>
+    <footer><span>Demonstration only. All metrics and file entries are fictional.</span><a href="https://github.com/lflish/vibeview">Explore vibeview on GitHub ↗</a></footer>
+  </div>
+  <script>
+    const datasets={
+      7:{values:[4,7,6,9,5,8,9],labels:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],max:10,totals:[48,24,18,6]},
+      30:{values:[18,25,27,31,28,35],labels:['1–5','6–10','11–15','16–20','21–25','26–30'],max:40,totals:[164,82,61,21]}
+    };
+    document.querySelectorAll('[data-days]').forEach(button=>button.addEventListener('click',()=>{
+      const days=button.dataset.days,data=datasets[days];
+      document.querySelectorAll('[data-days]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
+      ['total','html-total','image-total','video-total'].forEach((id,i)=>document.getElementById(id).textContent=data.totals[i]);
+      document.getElementById('period').textContent=`In the last ${days} days`;
+      document.querySelector('.chart h2').textContent=days==='7'?'A week of shared ideas':'A month of shared ideas';
+      document.getElementById('chart-caption').textContent=days==='7'?'Previews created each day · Fictional data':'Previews per 5-day period · Fictional data';
+      document.getElementById('chart-title').textContent=`Sample preview activity over ${days} days`;
+      document.getElementById('chart-desc').textContent=`${data.totals[0]} fictional previews: ${data.values.join(', ')} ${days==='7'?'per day':'per 5-day period'}.`;
+      document.getElementById('axis-max').textContent=data.max;document.getElementById('axis-mid').textContent=data.max/2;
+      const points=data.values.map((value,i)=>[35+i*540/(data.values.length-1),168-value/data.max*140]);
+      const line=points.map(([x,y],i)=>`${i?'L':'M'}${x} ${y}`).join('');
+      document.getElementById('line').setAttribute('d',line);document.getElementById('area').setAttribute('d',line+'L575 168L35 168Z');
+      const ns='http://www.w3.org/2000/svg';
+      document.getElementById('dots').replaceChildren(...points.map(([x,y])=>{const c=document.createElementNS(ns,'circle');c.setAttribute('cx',x);c.setAttribute('cy',y);c.setAttribute('r',4);return c;}));
+      document.getElementById('labels').replaceChildren(...points.map(([x],i)=>{const text=document.createElementNS(ns,'text');text.setAttribute('x',x);text.setAttribute('y',195);text.textContent=data.labels[i];return text;}));
+    }));
+  </script>
+</body>
+</html>
