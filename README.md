@@ -1,304 +1,286 @@
 # vibeview
 
-通用预览服务。把 AI / CI / 脚本在各台机器上生成的 **HTML / 图片 / 视频** 上传到一个公网服务，落盘后返回随机预览链接与访问码，浏览器验证后即可查看。配套 **CLI（`dview`）/ Claude Skill / Agent 说明 / GitHub Action 示例**。
+**把本地 HTML、图片和视频变成可分享、可管理的预览链接。**
 
-产品名 **vibeview**；命令行 bin 名 **dview**（本阶段通过仓库 / 安装脚本分发，**未**发布到 npm registry）。
+**简体中文** · [English](README.en.md)
 
-```
-本地文件 ──(Bearer token)──► Host POST /upload ──► data/ + meta
-                                                    │
-访客 ◄── GET /v/<id> ◄── Host 直出或反代 ──►（可选）Render 容器只读挂载 data/
-Host 另提供：/admin · /api/me*
-```
+vibeview 是一个自托管预览服务：AI 生成的报告、脚本输出的图表、截图或演示视频，上传后即可在浏览器查看。新上传默认需要访问码，管理端可以调整有效期、重置访问码或开放公开访问。
 
-- **HTML**：直接渲染为网页
-- **图片**（png/jpg/gif/webp/svg）：预览页居中展示
-- **视频**（mp4/webm）：预览页用播放器展示
+服务名是 **vibeview**，命令行工具名是 **`dview`**。文件保存在你自己的服务器上；本地开发无需 Docker。
 
-更细的需求与安全决策见 [`docs/SPEC.md`](docs/SPEC.md)；渲染 sidecar 设计见 [`docs/design-render-sidecar.md`](docs/design-render-sidecar.md)。
+[快速开始](#快速开始) · [上传与分享](#上传与分享) · [页面管理](#页面管理) · [访问保护与文件保留](#访问保护与文件保留) · [部署](#部署) · [API](#api) · [开发与测试](#开发与测试)
 
----
+## 可以用来做什么
 
-## 部署
-管理端的每条资源都有“访问保护”：默认需要服务端生成的随机访问码，有效期 7 天。可在管理端重置、指定到期时间、设置不过期或选择免验证码。重置和修改设置会撤销已有访问授权；访问码过期只限制访问，文件仍按存储保留配置保存。历史资源默认加锁，需管理员生成访问码；`access.protect_legacy: false` 可让没有访问设置的历史资源保持公开。
+- **分享 AI 产物**：把单文件 HTML 报告、可视化图表和原型页面发给他人查看。
+- **预览图片与视频**：上传截图、设计稿或短视频，使用统一的预览地址。
+- **整理长期资料**：在管理端查看简介、创建时间和已持续时长，按来源或类型查找资源。
+- **接入自动化流程**：通过 CLI、curl、AI Skill 或 CI 上传文件，获得链接、访问码和到期时间。
 
-上传接口返回 `accessCode`（仅生成时返回）和 `access.expiresAt`。CLI 使用 `dview upload file.html --json --access-days 7` 获取完整结果；只有需要公开分享时才加 `--public`。资源所有者也可通过 `PATCH /api/me/items/:id/access` 修改保护，管理员使用 `PATCH /admin/api/item/:id/access`，请求体示例：`{"mode":"code","expiresAt":"2026-12-01T00:00:00Z","reset":true}`。`expiresAt: null` 表示访问码不过期，`mode: "public"` 表示免验证。
-
-访问码为 12 位随机字符，服务端只保存加盐 scrypt 哈希。每个页面默认 10 分钟内最多失败 10 次，超限返回 429 和 `Retry-After`；计数跨 IP 累计并持久化，重启不能清空限制，最多同时进行 4 次哈希校验。可配置 `access.max_attempts` 和 `access.retry_window_minutes`。这会在持续猜码时暂时限制该页面所有访客，窗口结束恢复；不同页面分别计数。当前部署由单个主服务进程维护计数，多进程部署需共享原子计数存储。
-
-Sidecar 模式必须为主服务和 Compose 设置相同的 `DVIEW_RENDER_GATEWAY_TOKEN`（用 `openssl rand -hex 32` 生成），使渲染容器只接受来自主服务的受保护预览请求。不要输出或提交该密钥；未配置时受保护预览会被拒绝。上传的受保护 HTML 使用浏览器 sandbox 隔离，与管理端分开；其脚本不能访问管理端或浏览器存储，依赖同源存储/请求的页面可能需要适配。
-
-
-```bash
-git clone git@github.com:lflish/vibeview.git
-cd vibeview
-npm install
-cp config.example.yaml config.yaml   # 然后编辑 config.yaml 填入真实值
-npm start
-```
-
-生产环境建议用 `pm2` 或 systemd 守护，并在前面挂 Nginx/Caddy 反向代理 + HTTPS。
-
-> `config.yaml` 含 token / 管理密码 / session 密钥，已被 `.gitignore` 忽略，**切勿提交**。
-
-如果浏览器提示 `NET::ERR_CERT_DATE_INVALID`，先检查 Nginx 实际加载的证书：
-
-```bash
-echo | openssl s_client -connect your-domain.com:443 -servername your-domain.com 2>/dev/null \
-  | openssl x509 -noout -dates -subject
-```
-
-证书续期后必须把新证书安装到 Nginx 配置引用的路径，并执行 `nginx -t` 与 reload；只在用户目录生成新证书不会改变正在运行的 Nginx。仓库提供 `scripts/install-nginx-cert.sh` 作为一次性安装/校验脚本，但它需要具备 `sudo` 的服务器管理员执行。
-
-### 渲染 Sidecar（可选，推荐生产）
-
-主服务继续在**宿主机**跑（上传 / 管理 / 账户 / 清理）。另起**一个** Docker 容器只负责 `GET /v/*` 与 `/v/*/raw`，只读挂载统一的 `./data`，**不挂** `config.yaml`。启用后宿主机把 `/v/*` 反代到容器；容器挂掉时返回 **502**，**不会**静默回退到主进程直出。
-
-```bash
-# 1) 起渲染容器（仅 render；默认绑定 127.0.0.1:3001）
-docker compose up -d --build
-curl -sS http://127.0.0.1:3001/healthz
-
-# 如果宿主机 3001 已被占用，改用其他 loopback 端口，例如：
-RENDER_HOST_PORT=3213 docker compose up -d --build
-curl -sS http://127.0.0.1:3213/healthz
-
-# 2) config.yaml 打开反代（或环境变量）
-# preview:
-#   proxy_to_render: true
-#   render_url: "http://127.0.0.1:3001"
-# 等价：DVIEW_PREVIEW_PROXY=true DVIEW_RENDER_URL=http://127.0.0.1:3001
-
-# 3) 宿主机主服务（与容器共享同一 data 根，例如默认 ./data）
-npm start
-```
-
-本地开发默认 `proxy_to_render: false`，主服务直出 `/v`，**无需 Docker**。
-
-环境变量（容器侧）：`RENDER_PORT`（默认 3001）、`RENDER_DATA_ROOT`（默认 `/data`）。compose 将宿主机 `./data` 挂到容器 `/data:ro`，宿主机端口由 `RENDER_HOST_PORT` 控制，且只绑定 loopback。
-
-也可用无 compose 的等价命令：
-
-```bash
-docker build -f Dockerfile.render -t vibeview-render .
-docker run -d --name vibeview-render --read-only --tmpfs /tmp \
-  -p 127.0.0.1:3001:3001 -v "$(pwd)/data:/data:ro" \
-  -e RENDER_DATA_ROOT=/data vibeview-render
-```
-
-前置 Caddy/nginx 分流示例见设计文档；默认也可用主服务内嵌反代（`preview.proxy_to_render`）。
-
-**安全边界**：sidecar **隔离的是服务端预览进程与挂载面**（密钥不进预览容器），**不是**访客浏览器 XSS 沙箱——上传的 HTML 仍会在访客浏览器里执行脚本。请**只上传可信内容**；勿把 Docker 理解成「可安全托管不可信 HTML」。
-
-### 配置说明（`config.yaml`）
-
-| 字段 | 说明 |
+| 能力 | 当前支持 |
 | --- | --- |
-| `server.port` | 监听端口 |
-| `server.base_url` | 对外地址，用于拼接预览链接（不要带结尾斜杠） |
-| `storage.html_dir` / `image_dir` / `video_dir` | 按类型分目录的文件存储路径 |
-| `storage.meta_dir` | 元数据存储目录 |
-| `storage.retention_days` | 文件保留天数，超过自动清理（设 0 表示不清理） |
-| `storage.max_size_mb` | 单文件大小上限（MB） |
-| `tokens` | 上传账户列表：每个 token = 一个账户（`name` 唯一标识） |
-| `tokens[].max_files` | 可选，该账户最多保留的文件数 |
-| `tokens[].max_storage_mb` | 可选，该账户总存储上限（MB） |
-| `tokens[].retention_days` | 可选，覆盖全局保留天数；`0` = 不自动清理 |
-| `tokens[].disabled` | 可选，配置级停用；也可用管理端运行时停用 |
-| `admin.user` / `password` | 管理端登录账号密码（单管理员） |
-| `admin.session_secret` | session 加密密钥 |
-| `preview.proxy_to_render` | `true` 时把 `/v/*` 反代到 sidecar（默认 `false`） |
-| `preview.render_url` | sidecar 基址，仅 host 可达，默认 `http://127.0.0.1:3001` |
-| `preview.proxy_timeout_ms` | 反代超时毫秒，默认 30000 |
+| 文件类型 | HTML；PNG / JPG / GIF / WebP / SVG 等图片；MP4 / WebM 视频 |
+| 访问保护 | 默认随机访问码、有效期、重置、免验证；原文件也受保护 |
+| 资源管理 | 简介、创建时间、持续时长、搜索、筛选、排序、分页、批量删除 |
+| 账户管理 | 按上传 token 区分来源、统计用量、可选配额、停用 / 启用 |
+| 页面风格 | 管理页面支持浅色 / 深色 / 跟随系统，首次默认浅色 |
+| 文件存储 | 本地文件 + JSON 元数据；SQLite 索引加速管理查询 |
+| 部署方式 | Node.js 主服务；可选 Docker render sidecar |
 
-生成随机 token / secret：`openssl rand -hex 24`
+HTML 的简介优先读取上传时的 `description`，否则从 `<meta name="description">`、`<title>` 或标题提取。默认单文件上限为 **50 MB**，文件默认**永久保留**。
 
-**配置路径**：默认读项目根 `config.yaml`。可用环境变量 **`DVIEW_CONFIG_PATH`**（或 `CONFIG_PATH`）指向任意配置文件；其中相对路径的 `storage.*_dir` 相对**该配置文件所在目录**解析（冒烟测试用此隔离临时 data）。
-
-启用 sidecar 时，宿主机写入的 data 根须与容器挂载一致（compose 默认 `./data` ↔ `/data`）。
-
----
-
-## 生态接入
-
-让任意 AI / 脚本 / CI 上传产物并拿到预览链接。统一环境变量：`DVIEW_URL`、`DVIEW_TOKEN`。更完整的对照表见 [`docs/integrations.md`](docs/integrations.md)；给 Agent 读的短说明见 [`AGENTS.md`](AGENTS.md)。
-
-### 一键安装（Skill + CLI）
-
-```bash
-# 交互式
-curl -fsSL https://raw.githubusercontent.com/lflish/vibeview/main/install-skill.sh | bash
-
-# 非交互（环境变量）
-DVIEW_URL=https://your-domain.com DVIEW_TOKEN=<token> \
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/lflish/vibeview/main/install-skill.sh)"
-
-# 非交互（参数）；只要 CLI、不要 Claude Skill：
-bash install-skill.sh --url https://your-domain.com --token <token> --no-claude --cli
+```mermaid
+flowchart LR
+  A["CLI / AI / CI"] -->|上传 token| M["Node.js 主服务"]
+  B["浏览器访客"] -->|访问码与预览授权| M
+  M --> D["本地文件与 JSON 元数据"]
+  M -->|可选的认证代理| R["Docker render sidecar"]
+  D -->|只读挂载| R
 ```
 
-默认会：
+## 快速开始
 
-- 安装 Claude Skill → `~/.claude/skills/dview-upload/`
-- 安装 `/dview` 命令 → `~/.claude/commands/dview.md`
-- 安装 CLI → `~/.local/bin/dview`（并写入 PATH）
-- 把 `DVIEW_*` 写入 shell rc
+### 1. 安装并准备配置
+
+使用 **Node.js 22** 和 npm，与项目的 render 镜像版本一致。上传 CLI 需要 Bash、curl，以及 Python 3 或 Node.js；Skill 上传脚本需要 Python 3。Docker 仅在使用 sidecar 时需要。
+
+```bash
+git clone https://github.com/lflish/vibeview.git
+cd vibeview
+npm ci
+cp config.example.yaml config.yaml
+```
+
+编辑 `config.yaml`，至少设置这些字段：
+
+| 字段 | 本地运行时的设置 |
+| --- | --- |
+| `server.base_url` | `http://localhost:3000`；上线时改为实际 HTTPS 地址 |
+| `tokens[].name` | 唯一的上传来源名，例如 `my-machine` |
+| `tokens[].token` | 自己生成的随机上传 token |
+| `admin.user` / `admin.password` | 管理员用户名和自己的密码 |
+| `admin.session_secret` | 自己生成的随机 session 签名密钥 |
+
+可以用 `openssl rand -hex 24` 分别生成 token 和 session secret。`config.yaml` 已被 Git 忽略，其中的凭据不要提交到仓库。
+
+### 2. 启动服务
+
+```bash
+npm start
+```
+
+打开 [http://localhost:3000/admin](http://localhost:3000/admin)，用配置中的管理员账号登录。健康检查：
+
+```bash
+curl -fsS http://localhost:3000/healthz
+```
+
+### 3. 上传一个文件
+
+在另一个终端设置上传凭据：
+
+```bash
+export DVIEW_URL="http://localhost:3000"
+export DVIEW_TOKEN="你的上传 token"
+
+bash bin/dview upload /path/to/report.html --json
+```
+
+示例响应（访问码与时间以实际响应为准）：
+
+```json
+{
+  "url": "http://localhost:3000/v/Ab3xK9mP2qR7sT1v",
+  "id": "Ab3xK9mP2qR7sT1v",
+  "source": "my-machine",
+  "description": "季度报告",
+  "access": {
+    "required": true,
+    "configured": true,
+    "expiresAt": "2026-10-19T12:00:00.000Z",
+    "expired": false
+  },
+  "accessCode": "G7mK9pRX4aQ2"
+}
+```
+
+浏览器打开 `url`，输入 `accessCode` 即可预览。**保存访问码和到期时间，建议将访问码与链接分开分享。** 服务端只保存访问码哈希，忘记后需要重置，不能查询原码。
+
+## 上传与分享
 
 ### CLI
 
-```bash
-# 仓库内 / 全局
-npm link                    # 注册 bin: dview
-# 或安装脚本已装到 ~/.local/bin
-
-dview upload /path/to/chart.html
-dview list
-dview me
-dview delete <id>
-```
-
-### Claude Code
-
-装好后可用 Skill `dview-upload`，或对话里 `/dview <页面描述>`。也可手动：
+在仓库内使用 `bash bin/dview`，或执行 `npm link` 将命令注册为 `dview`。CLI 通过本仓库或安装脚本分发，尚未发布到 npm registry。
 
 ```bash
-bash ~/.claude/skills/dview-upload/upload.sh /path/to/chart.html
+dview upload ./report.html --json                 # 链接、访问码、到期时间
+dview upload ./report.html --json --access-days 1 # 访问码有效期 1 天
+dview upload ./public.html --public               # 显式设为免验证
+dview list                                       # 本账户资源
+dview me                                         # 本账户用量与配置
+dview delete Ab3xK9mP2qR7sT1v                      # 删除本账户资源
 ```
 
-### Cursor / Codex / 其它 Agent
-
-打开本仓库（或拷贝 `AGENTS.md` 要点到你的项目 agent 说明），生成预览产物后执行 `dview upload <file>`（或 curl），把返回的 URL 给用户。
-
-### GitHub Actions
-
-示例：[`examples/github-actions/upload-preview.yml`](examples/github-actions/upload-preview.yml) — 上传 HTML 并在 PR 评论预览链接。仓库 Secrets 配置 `DVIEW_URL`、`DVIEW_TOKEN`。
+普通上传的 stdout 只输出 URL，访问码输出到 stderr。**AI、脚本和 CI 应使用 `--json`，保留 `url`、`accessCode`、`access.expiresAt` 三个字段。** 访问码不要放进 URL 或生成的 HTML 中。
 
 ### curl
 
 ```bash
-curl -fsS -X POST "$DVIEW_URL/upload" \
+curl -fsS -X POST "${DVIEW_URL%/}/upload" \
   -H "Authorization: Bearer $DVIEW_TOKEN" \
-  -F "file=@/path/to/chart.html"
-# => {"url":"https://your-domain.com/v/<id>", ...}
+  -F "file=@./report.html" \
+  --form-string "description=季度报告与关键指标"
 ```
 
----
+可选表单字段：`access_days=7` 指定访问码有效天数，`access_mode=public` 明确开放公开访问。未指定时按服务端默认配置处理。
 
-## API 参考
+### AI Skill 与工具接入
 
-### 账户模型
+- **Claude Code**：运行 `bash install-skill.sh --url "$DVIEW_URL" --token "$DVIEW_TOKEN"`，安装上传 Skill、`/dview` 命令及 CLI。安装器默认将环境变量写入 shell 配置文件。
+- **Codex / Cursor / 其他 Agent**：参考 [AGENTS.md](AGENTS.md) 和 [上传 Skill](skill/dview-upload/SKILL.md)，生成文件后使用 CLI 或 `bash skill/dview-upload/upload.sh <文件> --json`。本仓库的 `install-skill.sh` 默认安装到 Claude 目录，其他工具可按各自目录约定安装 Skill。
+- **生成页面**：上传 Skill 默认使用浅色风格；仅上传已有文件时保留原样。
+- **GitHub Actions**：参考 [工作流示例](examples/github-actions/upload-preview.yml)，配置 Secrets `DVIEW_URL`、`DVIEW_TOKEN`。该示例目前只评论链接；接入受保护预览时，还需要保存上传响应中的访问码，并选择合适的分享渠道。
 
-每个 `tokens[]` 条目视为一个**账户**（named token）：`name` 写入资源的 `source`，用于隔离自助管理、用量统计与配额。全局 `admin` 仍可管理全部资源；机器侧用自己的 Bearer token 只能操作本账户资源。
+## 页面管理
 
-账户在 `config.yaml` 中配置；**管理端不能创建 / 轮换 token**（改 yaml 后需重启主服务）。滥用可用管理端**运行时停用**（写入 `data/account-state.json`，不改 yaml）。
+访问 `/admin` 可以：
 
-### `POST /upload`
+- 查看文件名、简介、来源、大小、创建时间、持续时长和访问保护状态。
+- 搜索文件名、简介、来源或 ID，按类型 / 来源筛选，排序和分页浏览。
+- 复制预览链接，删除单条资源或批量删除当前页选中资源。
+- 在「访问保护」中生成 / 重置访问码，设置到期时间、不过期或免验证。
+- 查看各账户的用量与配额，停用 / 启用账户，切换管理页面主题。
 
-上传文件，需有效且未停用的账户 token。超出 `max_files` / `max_storage_mb` 时返回 `429`。
+上传账户在 `config.yaml` 的 `tokens` 中维护；管理端目前不提供创建账户或轮换 token 的功能。修改配置后需要重启主服务。
 
-```bash
-curl -X POST "$DVIEW_URL/upload" \
-  -H "Authorization: Bearer <token>" \
-  -F "file=@/path/to/file.html"
-```
+## 访问保护与文件保留
 
-响应：
+这三个概念各有用途：
 
-```json
-{ "url": "https://your-domain.com/v/<id>", "id": "<id>", "source": "example-machine" }
-```
+| 配置 / 凭据 | 用途 | 默认行为 |
+| --- | --- | --- |
+| 上传 token | 允许机器或用户上传、管理本账户文件 | 必须在服务端配置 |
+| 页面访问码 | 允许访客查看某个预览及其原文件 | 新上传随机生成，默认有效期 7 天 |
+| 文件保留期 | 控制文件是否被自动删除 | `storage.retention_days: 0`，永久保留 |
 
-### 账户自助（Bearer token）
+访问码过期只限制访问，**不会删除文件**。历史页面默认也加锁，需要在管理端生成访问码或显式设为公开。重置访问码或调整保护设置会撤销已有访问授权；主服务重启也会撤销已授权的预览 cookie，访问码本身仍有效。
 
-```bash
-# 查看本账户信息与用量
-curl -H "Authorization: Bearer <token>" "$DVIEW_URL/api/me"
+默认每个页面 **10 分钟内最多失败 10 次**，超限返回 `429` 和 `Retry-After`。失败计数跨 IP 累计、持久化保存，重启不能清空限制；冷却期结束后恢复。持续猜码会暂时限制该页面的所有访客。当前计数实现由单个主服务进程维护。
 
-# 列出本账户资源
-curl -H "Authorization: Bearer <token>" "$DVIEW_URL/api/me/items"
+个人使用可以只配置一个上传 token，省略 `max_files` 和 `max_storage_mb`；账户配额是可选的本机文件数 / 存储限制。配额不涉及付费账户或外部 AI 服务额度。
 
-# 删除本账户下的一条资源（跨账户 id → 403）
-curl -X DELETE -H "Authorization: Bearer <token>" "$DVIEW_URL/api/me/items/<id>"
-```
+完整配置见 [config.example.yaml](config.example.yaml)，常用选项如下：
 
-### `GET /v/:id`
-
-公开预览页（HTML 直接渲染，图片/视频用 viewer 包裹）。启用 sidecar 且 `proxy_to_render: true` 时由渲染容器响应。
-
-### `GET /v/:id/raw`
-
-返回原始文件。
-
-### 管理端 API（需管理员 session）
-
-- `GET /admin/api/list` — 资源分页列表（未登录 → `401` JSON）。支持 `page`、`pageSize`（最大 100）、`q`（文件名/简介/来源/ID）、`type`、`source`、`sort=time|name|size|type|source`、`order=asc|desc`；返回 `items`、`total`、`page`、`pageSize`、`totalPages`、`sources`
-- `DELETE /admin/api/item/:id` — 删除任意资源
-- `DELETE /admin/api/items` — 批量删除资源，JSON body 为 `{ "ids": ["<id>", "<id>"] }`，单次最多 100 个
-- `GET /admin/api/accounts` — 账户列表 + 用量 / 配额
-- `POST /admin/api/accounts/:name/disable|enable` — 运行时停用/启用（写入 `data/account-state.json`，不改 `config.yaml`）
-
-管理列表和账户用量使用 `data/resources.sqlite` 索引加速；上传/删除会同步更新索引，服务启动时会从 `data/meta/*.json` 重建一次。JSON 元数据仍是权威数据源，删除 SQLite 文件后重启即可自动恢复索引。
-
----
-
-## 管理端
-
-浏览器打开 `https://your-domain.com/admin`，用 `config.yaml` 中的 `admin` 账号登录：
-
-- **资源**：搜索 / 类型与来源筛选 / 排序 / 复制链接 / 删除确认 / toast
-- **账户**：各 token 账户的文件数与占用、配额进度条、一键停用/启用，并可跳转到该账户资源
-
-Token 本身仍在 `config.yaml` 的 `tokens` 中维护（见上文账户模型）。
-
----
-
-## 测试（冒烟）
-
-全链路冒烟脚本会用临时目录 + **`DVIEW_CONFIG_PATH`** 起服，**不污染**你本地的 `config.yaml` / `./data`：
-
-```bash
-npm test
-# 等价：npm run smoke  →  bash scripts/smoke.sh
-```
-
-覆盖要点（摘要）：健康检查；HTML / 图 / 视频上传与预览；非法类型与超大文件；配额 `429`；跨账户 `403`；停用/启用；cleanup；CLI；未登录管理 API `401` JSON；以及内嵌的 sidecar 本地检查（`scripts/smoke-render.sh`，无需 Docker 容器）。
-
-管理端另有可选浏览器回归测试 `npm run test:admin`（运行环境需提供 Playwright 和 Chromium）：覆盖分页、简介/持续时间、空结果、当前页选择、取消/确认批量删除，以及旧请求失败不覆盖新结果。测试使用临时配置和数据，不操作现有资源。有 Docker 时可用 `docker compose` 做实机 sidecar 验证（见设计文档）。
-
-访问保护回归使用 `npm run test:access`，覆盖默认加锁、原文件与视频分段授权、重置、到期、历史资源、所有权、重试冷却与持久化，以及 Sidecar 防绕过。`npm run test:access -- --browser` 额外验证管理端操作、访问码表单和受保护 HTML 的浏览器隔离（需 Playwright 和 Chromium）。
-
-单独检查渲染相关本地断言：
-
-```bash
-npm run smoke:render
-```
-
----
-
-## 安全说明
-
-- 上传需有效且未停用的账户 token；预览靠 16 位随机地址保护（默认公开，无签名 URL）。
-- 账户可设配额与独立保留期；管理端可运行时停用账户。
-- HTML 会在访问者浏览器中执行脚本，**只上传可信内容**。受保护 HTML 使用 `sandbox allow-scripts` 隔离浏览器同源权限；显式设为公开的 HTML 不应用此隔离。渲染 sidecar（Docker）负责隔离预览进程与宿主机密钥，不能代替浏览器端隔离。
-- 健康检查：主服务 `GET /healthz`（浅检查）；容器内亦有 `/healthz`。
-- 文件默认永久保留。`storage.retention_days: 0` 关闭自动清理；配置正数（例如 `30`）才会永久删除超过该天数的文件。账户的 `tokens[].retention_days` 优先于全局配置。修改配置后需重启主服务；启用清理时会在启动时立即执行，之后每 6 小时执行一次。已删除的文件无法通过修改保留期恢复。
-
-### 本阶段明确不做（避免误解）
-
-| 项 | 说明 |
+| 字段 | 默认值 / 说明 |
 | --- | --- |
-| 管理端 UI 创建 / 轮换 token | 继续改 `config.yaml` + 重启；滥用靠运行时 disable |
-| iframe sandbox 预览模式 | 默认仍是直接渲染；可选 sandbox 延期 |
-| 整站进 Docker / 双全量栈 | 仅一个渲染 sidecar；主服务留宿主机 |
-| npm 发布 `dview` 包 | 用 `install-skill.sh` / `npm link` / 仓库 bin |
-| 多管理员 RBAC、预览签名 URL、对象存储 | 见 SPEC 延期 / 非目标 |
+| `server.port` / `server.base_url` | `3000` / 对外预览地址 |
+| `storage.max_size_mb` | `50`，单文件大小上限 |
+| `storage.retention_days` | `0`；正数会自动删除超过该天数的文件 |
+| `tokens[].max_files` / `max_storage_mb` | 不设则不限制该账户用量 |
+| `tokens[].retention_days` | 覆盖全局保留期；`0` 为永久保留 |
+| `access.default_required` / `protect_legacy` | `true` / `true`，新文件与历史文件默认加锁 |
+| `access.default_days` / `grant_minutes` | `7` 天 / `30` 分钟的预览授权 |
+| `access.max_attempts` / `retry_window_minutes` | `10` 次 / `10` 分钟 |
+| `access.attempts_file` | `./data/preview-attempts.json`，失败计数文件 |
+| `preview.proxy_to_render` / `render_url` | `false` / `http://127.0.0.1:3001` |
 
----
+配置默认从项目根目录的 `config.yaml` 读取，可通过 `DVIEW_CONFIG_PATH`（或 `CONFIG_PATH`）指定其他文件。相对存储路径按**配置文件所在目录**解析。启用自动清理时，主服务启动即清理一次，之后每 6 小时执行一次；已删除的文件无法通过调整配置恢复。
 
-## 相关文档
+## 部署
 
-- [`docs/SPEC.md`](docs/SPEC.md) — 需求与排期
-- [`docs/design-render-sidecar.md`](docs/design-render-sidecar.md) — 渲染 sidecar
-- [`docs/integrations.md`](docs/integrations.md) — 生态接入对照
-- [`AGENTS.md`](AGENTS.md) — Agent 短说明
-- [`config.example.yaml`](config.example.yaml) — 配置示例
+### 主服务
+
+主服务负责上传、访问验证、管理、账户和清理，可用 PM2 或 systemd 守护。对外服务需要反向代理和 HTTPS，并将 `server.base_url` 设置为实际域名。
+
+备份 `config.yaml`、上传数据及受限环境文件。JSON 元数据是资源的权威记录，`data/resources.sqlite` 是可重建的查询索引。配置中的 token、密码和 session secret 不要公开；上传凭据应只发给需要上传的机器或用户。
+
+### Docker render sidecar
+
+Sidecar 只负责渲染预览，主服务继续运行在宿主机。容器只读挂载 `./data`，不挂载 `config.yaml`；受保护预览必须经主服务验证后进入 sidecar。
+
+停止已运行的主服务后，在同一终端执行：
+
+```bash
+mkdir -p data/html data/images data/videos data/meta
+export DVIEW_RENDER_GATEWAY_TOKEN="$(openssl rand -hex 32)"
+
+RENDER_HOST_PORT=3001 docker compose up -d --build render
+curl -fsS http://127.0.0.1:3001/healthz
+
+DVIEW_PREVIEW_PROXY=true \
+DVIEW_RENDER_URL=http://127.0.0.1:3001 \
+npm start
+```
+
+主服务与 Compose 必须使用**同一个** gateway 密钥。正式部署应将密钥保存到受限的环境配置中，保证重启时仍一致；主服务也可使用 `preview.gateway_token`，Compose 则读取 `DVIEW_RENDER_GATEWAY_TOKEN`。该密钥不要提交到仓库。
+
+端口被占用时，可设置其他 `RENDER_HOST_PORT`，同时修改主服务的 `preview.render_url` 或 `DVIEW_RENDER_URL`。Sidecar 端口只绑定 loopback；容器不可用时预览会报错，不会静默回退到主服务直接渲染。启用 sidecar 时，主服务的存储目录必须与容器挂载的 `./data` 一致。
+
+[Sidecar 设计](docs/design-render-sidecar.md) · [本项目的 TX 发布 Skill](.agents/skills/deploy-tx/SKILL.md)
+
+### HTML 的浏览器行为
+
+只上传可信内容。受保护 HTML 使用 `sandbox allow-scripts` 隔离同源权限；脚本可以运行，但浏览器存储和同源请求可能不可用，依赖这些能力的页面需要适配。显式公开的 HTML 不应用该隔离。Docker sidecar 提供服务端进程隔离，不能代替浏览器端隔离。
+
+浏览器提示 `NET::ERR_CERT_DATE_INVALID` 时，检查实际对外证书的有效期；续期后还需安装证书并重新加载反向代理。项目提供 [Nginx 证书安装辅助脚本](scripts/install-nginx-cert.sh)，其目标路径需要与部署配置一致，执行需要管理员的 sudo 权限。
+
+## API
+
+| 方法与路径 | 认证 | 用途 |
+| --- | --- | --- |
+| `POST /upload` | Bearer 上传 token | 上传文件，返回链接、访问状态和新访问码 |
+| `GET /api/me` | Bearer 上传 token | 本账户信息、用量与配额 |
+| `GET /api/me/items` | Bearer 上传 token | 列出本账户资源 |
+| `DELETE /api/me/items/:id` | Bearer 上传 token | 删除本账户资源 |
+| `PATCH /api/me/items/:id/access` | Bearer 上传 token | 修改本账户资源的访问保护 |
+| `GET /v/:id` | 公开，或已验证的预览 cookie | 预览页面；未授权时显示访问码表单 |
+| `POST /v/:id/unlock` | 表单中的 `code` | 验证访问码并设置预览 cookie |
+| `GET /v/:id/raw` | 与预览页相同 | 获取原文件，支持 Range 请求 |
+| `GET /admin/api/list` | 管理员 session | 分页、搜索、筛选和排序 |
+| `PATCH /admin/api/item/:id/access` | 管理员 session | 生成 / 重置 / 修改访问保护 |
+| `DELETE /admin/api/item/:id` | 管理员 session | 删除单条资源 |
+| `DELETE /admin/api/items` | 管理员 session | 批量删除，JSON 为 `{"ids":["id1","id2"]}`，最多 100 条 |
+| `GET /admin/api/accounts` | 管理员 session | 账户列表与用量 |
+| `POST /admin/api/accounts/:name/disable` 或 `/enable` | 管理员 session | 停用或启用账户 |
+| `GET /healthz` | 无 | 主服务或 sidecar 的浅健康检查 |
+
+访问保护的 PATCH body 使用 `mode: "code"` 或 `"public"`、`expiresAt`（ISO 时间或 `null` 表示不过期）、`reset: true`（重新生成）。新访问码仅在生成响应中返回，列表不会返回原码或哈希。
+
+管理列表支持 `page`、`pageSize`（最大 100）、`q`、`type`、`source`、`sort=time|name|size|type|source`、`order=asc|desc`；响应包含 `items`、`total`、`page`、`pageSize`、`totalPages`、`sources`。
+
+## 开发与测试
+
+```bash
+npm test                          # 保留期、简介、索引、上传与管理冒烟
+npm run test:access                # 访问保护、重试限制、Sidecar 防绕过
+npm run smoke:render               # 渲染测试；Docker 可用时额外验证真实容器
+
+# 以下需要环境中可用的 Playwright 和 Chromium
+npm run test:admin
+npm run test:theme
+npm run test:access -- --browser
+```
+
+测试使用临时配置与数据，不操作现有资源。`SMOKE_SKIP_RENDER=1 npm test` 可跳过默认测试中的渲染检查；浏览器测试依赖需要自行准备。
+
+```text
+server.js            主服务：上传、验证、管理与账户 API
+render-server.js     可选的渲染 sidecar
+lib/                 存储、索引、访问保护、清理与预览逻辑
+views/               管理页、登录页与主题
+bin/dview            上传 / 管理 CLI
+skill/ + command/    上传 Skill 与 Claude 命令
+.agents/skills/      本项目的 TX 发布 Skill
+scripts/             回归测试与部署辅助脚本
+```
+
+## 项目范围与参与
+
+目前支持单管理员、本地文件存储和单个主服务进程；不包含多管理员 RBAC、管理端 token 创建 / 轮换、对象存储后端或整套 Docker 化主服务。
+
+欢迎提交 Issue 或 PR。反馈问题时可附上 Node.js 版本、部署方式、复现步骤和脱敏日志；更改默认行为时同步更新中英文 README、配置示例和相关测试。
+
+- [完整配置](config.example.yaml)
+- [Agent 使用说明](AGENTS.md) · [上传 Skill](skill/dview-upload/SKILL.md)
+- [Sidecar 设计](docs/design-render-sidecar.md) · [TX 发布 Skill](.agents/skills/deploy-tx/SKILL.md)
+- [需求与设计记录](docs/SPEC.md)
