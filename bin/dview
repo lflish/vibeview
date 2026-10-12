@@ -16,6 +16,7 @@ vibeview CLI — 上传并管理本账户预览资源
 
 用法:
   dview upload <file>     上传文件，stdout 打印预览 URL
+                         默认生成访问码（stderr 显示），有效期 7 天
   dview list              列出本账户资源
   dview delete <id>       删除本账户下的一条资源
   dview me                查看本账户信息与用量
@@ -24,6 +25,9 @@ vibeview CLI — 上传并管理本账户预览资源
 选项（可放在子命令前或后）:
   --url URL               服务地址（默认 $DVIEW_URL）
   --token TOKEN           上传 token（默认 $DVIEW_TOKEN）
+  --json                  上传结果按 JSON 输出（包含新访问码）
+  --public                上传为免验证码的公开资源
+  --access-days DAYS      新访问码有效天数（默认服务端配置）
   -h, --help              显示帮助
 
 环境变量:
@@ -100,6 +104,9 @@ URL="${DVIEW_URL:-}"
 TOKEN="${DVIEW_TOKEN:-}"
 CMD=""
 ARGS=()
+UPLOAD_JSON=0
+UPLOAD_PUBLIC=0
+ACCESS_DAYS=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -115,6 +122,19 @@ while [ "$#" -gt 0 ]; do
     --token)
       [ "$#" -ge 2 ] || { err "--token 需要参数"; exit 1; }
       TOKEN="$2"
+      shift 2
+      ;;
+    --json)
+      UPLOAD_JSON=1
+      shift
+      ;;
+    --public)
+      UPLOAD_PUBLIC=1
+      shift
+      ;;
+    --access-days)
+      [ "$#" -ge 2 ] || { err "--access-days 需要参数"; exit 1; }
+      ACCESS_DAYS="$2"
       shift 2
       ;;
     upload|list|delete|me|whoami)
@@ -185,7 +205,10 @@ cmd_upload() {
     err "文件不存在: $file"
     exit 1
   fi
-  http POST "${BASE}/upload" -F "file=@${file}"
+  local fields=(-F "file=@${file}")
+  if [ "$UPLOAD_PUBLIC" = "1" ]; then fields+=(--form-string 'access_mode=public'); fi
+  if [ -n "$ACCESS_DAYS" ]; then fields+=(--form-string "access_days=$ACCESS_DAYS"); fi
+  http POST "${BASE}/upload" "${fields[@]}"
   if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
     err "上传失败 (HTTP ${HTTP_CODE}): ${BODY}"
     exit 1
@@ -196,7 +219,14 @@ cmd_upload() {
     err "上传失败，服务返回: ${BODY}"
     exit 1
   fi
-  printf '%s\n' "$preview"
+  if [ "$UPLOAD_JSON" = "1" ]; then
+    printf '%s\n' "$BODY"
+  else
+    printf '%s\n' "$preview"
+    local access_code
+    access_code="$(json_field accessCode "$BODY" || true)"
+    if [ -n "$access_code" ]; then printf '访问码（请单独分享并保存）: %s\n' "$access_code" >&2; fi
+  fi
 }
 
 cmd_list() {

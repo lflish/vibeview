@@ -316,7 +316,7 @@ Admin → /admin* 、账户 API → 仅 Host
 - 公网安全组 / 防火墙：**只放行** host 入口端口（或 80/443 到 Caddy）。  
 - **不**对公网放行 `3001`。  
 - 宿主机本地：主服务用 `http://127.0.0.1:3001` 作为 `preview.render_url`。  
-- 容器网络：默认 bridge 即可；**推荐**关闭不必要出网（compose `network_mode` 或内部网络无 default gateway）。预览进程当前不主动外连；禁出网可降低 SSRF/回连价值。  
+- 容器网络：默认 bridge 即可；若部署环境支持 internal 网络的 published port 转发，可关闭不必要出网。当前 compose 保持普通 bridge，以兼容需要通过宿主机 loopback 端口反代的 Docker 环境；预览进程当前不主动外连，宿主机端口仍只绑定 loopback。
 - 不挂 Docker socket；不做 `host` network 除非有强理由（默认不用）。
 
 ### 7.3 同源说明
@@ -457,7 +457,7 @@ services:
     volumes:
       - ./data:/data:ro
     ports:
-      - "127.0.0.1:3001:3001"
+      - "127.0.0.1:${RENDER_HOST_PORT:-3001}:3001"
     environment:
       RENDER_PORT: "3001"
       RENDER_DATA_ROOT: "/data"
@@ -526,7 +526,7 @@ docker run -d --name vibeview-render --read-only \
 ### 13.2 生产启用 sidecar
 
 1. 确保存储在统一可挂载的 `./data`（或文档所述 `data_root`）。  
-2. `docker compose up -d` 起 render；确认 `curl -sS http://127.0.0.1:3001/healthz`。  
+      2. `RENDER_HOST_PORT=3001 docker compose up -d` 起 render；确认 `curl -sS http://127.0.0.1:3001/healthz`。端口冲突时可换成其他 loopback 端口。
 3. 配置 `preview.proxy_to_render: true`、`render_url: http://127.0.0.1:3001`。  
 4. 重启 host 主服务；`curl` 公网 `/v/<已有 id>` 应 200。  
 5. 刻意 `docker stop` render → `/v/<id>` 应 **502**，且 **不应**再从主进程出正文。

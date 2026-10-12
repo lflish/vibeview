@@ -15,7 +15,7 @@ allowed-tools: Bash, Write, Read
 先确认 vibeview 上传所需的环境变量已就绪:
 
 ```bash
-echo "DVIEW_URL=${DVIEW_URL:-<未设置>}"; echo "DVIEW_TOKEN=${DVIEW_TOKEN:+<已设置>}"; echo "TOKEN_EMPTY=${DVIEW_TOKEN:-空}"
+printf 'DVIEW_URL=%s\nDVIEW_TOKEN=%s\n' "${DVIEW_URL:-<未设置>}" "${DVIEW_TOKEN:+<已设置>}"
 ```
 
 - 如果 `DVIEW_URL` 或 `DVIEW_TOKEN` 为空,**立即停止**,提示用户:
@@ -43,24 +43,25 @@ echo "DVIEW_URL=${DVIEW_URL:-<未设置>}"; echo "DVIEW_TOKEN=${DVIEW_TOKEN:+<�
 
 按顺序探测上传方式(用第一个可用的):
 
-1. PATH 上的 CLI:`dview upload <文件>`
-2. 项目内 CLI:`bash bin/dview upload <文件>`
-3. 项目内 Skill 脚本:`bash skill/dview-upload/upload.sh <文件>`
-4. 全局 Skill 脚本:`bash $HOME/.claude/skills/dview-upload/upload.sh <文件>`
+1. PATH 上的 CLI:`dview upload <文件> --json`（返回新访问码和到期时间）
+2. 项目内 CLI:`bash bin/dview upload <文件> --json`
+3. 项目内 Skill 脚本:`bash skill/dview-upload/upload.sh <文件> --json`
+4. 全局 Skill 脚本:`bash $HOME/.claude/skills/dview-upload/upload.sh <文件> --json`
 
 ```bash
 FILE="<刚生成的HTML路径>"
 if command -v dview >/dev/null 2>&1; then
-  dview upload "$FILE"
+  dview upload "$FILE" --json
 elif [ -x bin/dview ]; then
-  bash bin/dview upload "$FILE"
+  bash bin/dview upload "$FILE" --json
 else
   UP="skill/dview-upload/upload.sh"; [ -f "$UP" ] || UP="$HOME/.claude/skills/dview-upload/upload.sh"
-  bash "$UP" "$FILE"
+  bash "$UP" "$FILE" --json
 fi
 ```
 
-- 成功时 stdout 打印形如 `https://<域名>/v/<随机id>` 的预览链接
+- 成功时 stdout 返回 JSON，`url` 为形如 `https://<域名>/v/<随机id>` 的预览链接
+- JSON 模式读取 `url`、`accessCode`、`access.expiresAt`；普通脚本在 stderr 显示访问码。默认上传需要访问码，返回链接时同时告知访问码及到期时间，建议分开分享，不要将访问码写入 URL 或 HTML。只有用户明确要求免验证码时才使用 CLI 的 `--public`。
 - 上传成功后,把该链接清晰地展示给用户,一句话说明这是可在浏览器打开的预览页
 - 若全部路径都不存在,提示用户先运行 `install-skill.sh`（或 `npm link`）安装 CLI / Skill
 - 若上传失败(非零退出),把错误输出转述给用户,并保留已生成的本地 HTML 路径供其手动处理

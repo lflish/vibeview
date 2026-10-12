@@ -9,8 +9,8 @@
 
 set -euo pipefail
 
-if [ "$#" -ne 1 ]; then
-  echo "用法: $0 <文件路径>" >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ] || { [ "$#" -eq 2 ] && [ "$2" != '--json' ]; }; then
+  echo "用法: $0 <文件路径> [--json]" >&2
   exit 1
 fi
 
@@ -37,4 +37,14 @@ if [ -z "$URL" ]; then
   exit 1
 fi
 
+if [ "${2:-}" = '--json' ]; then
+  printf '%s\n' "$RESP"
+  exit 0
+fi
 echo "$URL"
+CODE=$(printf '%s' "$RESP" | python3 -c "import sys,json;print(json.load(sys.stdin).get('accessCode',''))" 2>/dev/null || true)
+if [ -n "$CODE" ]; then
+  printf '访问码（请单独分享并保存）: %s\n' "$CODE" >&2
+  UNTIL=$(printf '%s' "$RESP" | python3 -c "import sys,json;print(json.load(sys.stdin).get('access',{}).get('expiresAt') or '不过期')")
+  printf '访问码到期时间: %s\n' "$UNTIL" >&2
+fi

@@ -1,6 +1,6 @@
 # vibeview
 
-通用预览服务。把 AI / CI / 脚本在各台机器上生成的 **HTML / 图片 / 视频** 上传到一个公网服务，落盘后返回随机、不可猜测的预览链接，浏览器打开即可查看。配套 **CLI（`dview`）/ Claude Skill / Agent 说明 / GitHub Action 示例**。
+通用预览服务。把 AI / CI / 脚本在各台机器上生成的 **HTML / 图片 / 视频** 上传到一个公网服务，落盘后返回随机预览链接与访问码，浏览器验证后即可查看。配套 **CLI（`dview`）/ Claude Skill / Agent 说明 / GitHub Action 示例**。
 
 产品名 **vibeview**；命令行 bin 名 **dview**（本阶段通过仓库 / 安装脚本分发，**未**发布到 npm registry）。
 
@@ -20,6 +20,14 @@ Host 另提供：/admin · /api/me*
 ---
 
 ## 部署
+管理端的每条资源都有“访问保护”：默认需要服务端生成的随机访问码，有效期 7 天。可在管理端重置、指定到期时间、设置不过期或选择免验证码。重置和修改设置会撤销已有访问授权；访问码过期只限制访问，文件仍按存储保留配置保存。历史资源默认加锁，需管理员生成访问码；`access.protect_legacy: false` 可让没有访问设置的历史资源保持公开。
+
+上传接口返回 `accessCode`（仅生成时返回）和 `access.expiresAt`。CLI 使用 `dview upload file.html --json --access-days 7` 获取完整结果；只有需要公开分享时才加 `--public`。资源所有者也可通过 `PATCH /api/me/items/:id/access` 修改保护，管理员使用 `PATCH /admin/api/item/:id/access`，请求体示例：`{"mode":"code","expiresAt":"2026-12-01T00:00:00Z","reset":true}`。`expiresAt: null` 表示访问码不过期，`mode: "public"` 表示免验证。
+
+访问码为 12 位随机字符，服务端只保存加盐 scrypt 哈希。每个页面默认 10 分钟内最多失败 10 次，超限返回 429 和 `Retry-After`；计数跨 IP 累计并持久化，重启不能清空限制，最多同时进行 4 次哈希校验。可配置 `access.max_attempts` 和 `access.retry_window_minutes`。这会在持续猜码时暂时限制该页面所有访客，窗口结束恢复；不同页面分别计数。当前部署由单个主服务进程维护计数，多进程部署需共享原子计数存储。
+
+Sidecar 模式必须为主服务和 Compose 设置相同的 `DVIEW_RENDER_GATEWAY_TOKEN`（用 `openssl rand -hex 32` 生成），使渲染容器只接受来自主服务的受保护预览请求。不要输出或提交该密钥；未配置时受保护预览会被拒绝。上传的受保护 HTML 使用浏览器 sandbox 隔离，与管理端分开；其脚本不能访问管理端或浏览器存储，依赖同源存储/请求的页面可能需要适配。
+
 
 ```bash
 git clone git@github.com:lflish/vibeview.git
@@ -33,14 +41,27 @@ npm start
 
 > `config.yaml` 含 token / 管理密码 / session 密钥，已被 `.gitignore` 忽略，**切勿提交**。
 
+如果浏览器提示 `NET::ERR_CERT_DATE_INVALID`，先检查 Nginx 实际加载的证书：
+
+```bash
+echo | openssl s_client -connect your-domain.com:443 -servername your-domain.com 2>/dev/null \
+  | openssl x509 -noout -dates -subject
+```
+
+证书续期后必须把新证书安装到 Nginx 配置引用的路径，并执行 `nginx -t` 与 reload；只在用户目录生成新证书不会改变正在运行的 Nginx。仓库提供 `scripts/install-nginx-cert.sh` 作为一次性安装/校验脚本，但它需要具备 `sudo` 的服务器管理员执行。
+
 ### 渲染 Sidecar（可选，推荐生产）
 
 主服务继续在**宿主机**跑（上传 / 管理 / 账户 / 清理）。另起**一个** Docker 容器只负责 `GET /v/*` 与 `/v/*/raw`，只读挂载统一的 `./data`，**不挂** `config.yaml`。启用后宿主机把 `/v/*` 反代到容器；容器挂掉时返回 **502**，**不会**静默回退到主进程直出。
 
 ```bash
-# 1) 起渲染容器（仅 render；绑定 127.0.0.1:3001）
+# 1) 起渲染容器（仅 render；默认绑定 127.0.0.1:3001）
 docker compose up -d --build
 curl -sS http://127.0.0.1:3001/healthz
+
+# 如果宿主机 3001 已被占用，改用其他 loopback 端口，例如：
+RENDER_HOST_PORT=3213 docker compose up -d --build
+curl -sS http://127.0.0.1:3213/healthz
 
 # 2) config.yaml 打开反代（或环境变量）
 # preview:
@@ -54,7 +75,7 @@ npm start
 
 本地开发默认 `proxy_to_render: false`，主服务直出 `/v`，**无需 Docker**。
 
-环境变量（容器侧）：`RENDER_PORT`（默认 3001）、`RENDER_DATA_ROOT`（默认 `/data`）。compose 将宿主机 `./data` 挂到容器 `/data:ro`，端口仅 `127.0.0.1:3001`。
+环境变量（容器侧）：`RENDER_PORT`（默认 3001）、`RENDER_DATA_ROOT`（默认 `/data`）。compose 将宿主机 `./data` 挂到容器 `/data:ro`，宿主机端口由 `RENDER_HOST_PORT` 控制，且只绑定 loopback。
 
 也可用无 compose 的等价命令：
 
@@ -210,10 +231,13 @@ curl -X DELETE -H "Authorization: Bearer <token>" "$DVIEW_URL/api/me/items/<id>"
 
 ### 管理端 API（需管理员 session）
 
-- `GET /admin/api/list` — 全部资源（未登录 → `401` JSON）
+- `GET /admin/api/list` — 资源分页列表（未登录 → `401` JSON）。支持 `page`、`pageSize`（最大 100）、`q`（文件名/简介/来源/ID）、`type`、`source`、`sort=time|name|size|type|source`、`order=asc|desc`；返回 `items`、`total`、`page`、`pageSize`、`totalPages`、`sources`
 - `DELETE /admin/api/item/:id` — 删除任意资源
+- `DELETE /admin/api/items` — 批量删除资源，JSON body 为 `{ "ids": ["<id>", "<id>"] }`，单次最多 100 个
 - `GET /admin/api/accounts` — 账户列表 + 用量 / 配额
 - `POST /admin/api/accounts/:name/disable|enable` — 运行时停用/启用（写入 `data/account-state.json`，不改 `config.yaml`）
+
+管理列表和账户用量使用 `data/resources.sqlite` 索引加速；上传/删除会同步更新索引，服务启动时会从 `data/meta/*.json` 重建一次。JSON 元数据仍是权威数据源，删除 SQLite 文件后重启即可自动恢复索引。
 
 ---
 
@@ -239,7 +263,9 @@ npm test
 
 覆盖要点（摘要）：健康检查；HTML / 图 / 视频上传与预览；非法类型与超大文件；配额 `429`；跨账户 `403`；停用/启用；cleanup；CLI；未登录管理 API `401` JSON；以及内嵌的 sidecar 本地检查（`scripts/smoke-render.sh`，无需 Docker 容器）。
 
-管理端浏览器点选路径**未**做自动化。有 Docker 时可用 `docker compose` 做实机 sidecar 验证（见设计文档）。
+管理端另有可选浏览器回归测试 `npm run test:admin`（运行环境需提供 Playwright 和 Chromium）：覆盖分页、简介/持续时间、空结果、当前页选择、取消/确认批量删除，以及旧请求失败不覆盖新结果。测试使用临时配置和数据，不操作现有资源。有 Docker 时可用 `docker compose` 做实机 sidecar 验证（见设计文档）。
+
+访问保护回归使用 `npm run test:access`，覆盖默认加锁、原文件与视频分段授权、重置、到期、历史资源、所有权、重试冷却与持久化，以及 Sidecar 防绕过。`npm run test:access -- --browser` 额外验证管理端操作、访问码表单和受保护 HTML 的浏览器隔离（需 Playwright 和 Chromium）。
 
 单独检查渲染相关本地断言：
 
@@ -253,9 +279,9 @@ npm run smoke:render
 
 - 上传需有效且未停用的账户 token；预览靠 16 位随机地址保护（默认公开，无签名 URL）。
 - 账户可设配额与独立保留期；管理端可运行时停用账户。
-- HTML 会在访问者浏览器中执行脚本，**只上传可信内容**。渲染 sidecar（Docker）隔离的是预览进程与宿主机密钥面，**不能**阻止访客浏览器侧 XSS；当前预览页仅加了基础安全响应头（`nosniff` / `Referrer-Policy` / `X-Frame-Options`）。
+- HTML 会在访问者浏览器中执行脚本，**只上传可信内容**。受保护 HTML 使用 `sandbox allow-scripts` 隔离浏览器同源权限；显式设为公开的 HTML 不应用此隔离。渲染 sidecar（Docker）负责隔离预览进程与宿主机密钥，不能代替浏览器端隔离。
 - 健康检查：主服务 `GET /healthz`（浅检查）；容器内亦有 `/healthz`。
-- 文件默认保留 7 天后自动清理（可按账户覆盖）。
+- 文件默认永久保留。`storage.retention_days: 0` 关闭自动清理；配置正数（例如 `30`）才会永久删除超过该天数的文件。账户的 `tokens[].retention_days` 优先于全局配置。修改配置后需重启主服务；启用清理时会在启动时立即执行，之后每 6 小时执行一次。已删除的文件无法通过修改保留期恢复。
 
 ### 本阶段明确不做（避免误解）
 

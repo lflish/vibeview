@@ -13,10 +13,22 @@ storage:
   video_dir: "./data/videos"
   # 元数据存放目录，每条上传一个 <id>.json
   meta_dir: "./data/meta"
-  # 文件保留天数，超过后自动清理（账户可单独覆盖）
-  retention_days: 7
+  # 0 = 永久保留；正数 = 超过该天数后永久删除（账户可单独覆盖）
+  retention_days: 0
   # 单文件大小上限（MB）
   max_size_mb: 50
+
+# 访问码过期只限制访问，不删除文件；与 storage.retention_days 分开。
+access:
+  default_required: true
+  default_days: 7
+  grant_minutes: 30
+  # 历史资源没有 access 设置时也加锁；管理员生成访问码或显式设为公开。
+  protect_legacy: true
+  # 每个页面的失败尝试累计限额；换 IP 或重启服务也不能绕过。
+  max_attempts: 10
+  retry_window_minutes: 10
+  attempts_file: "./data/preview-attempts.json"
 
 # 上传账户列表：每个 token 即一个「账户 / 来源」。
 # name 会写入资源 meta.source，用于管理端筛选、用量统计与自助 API 鉴权。
@@ -46,3 +58,6 @@ preview:
   proxy_to_render: false
   render_url: "http://127.0.0.1:3001"
   proxy_timeout_ms: 30000
+  # Sidecar 模式：主服务与 docker compose 需要设置同一随机密钥。
+  # export DVIEW_RENDER_GATEWAY_TOKEN="$(openssl rand -hex 32)"
+  # 或主服务在这里配置 gateway_token，Compose 使用上述环境变量。

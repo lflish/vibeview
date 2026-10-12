@@ -136,7 +136,7 @@ Host 另提供：/admin · /api/me/*
 | P1-1 | **渲染 sidecar**：单容器只服务预览；Dockerfile + compose；宿主机反代 `/v` | `[已实现]`（未提交） | 见 [design-render-sidecar.md](./design-render-sidecar.md)；`render-server.js` + `Dockerfile.render` + compose；`preview.proxy_to_render`；502 不回退。**叙事：≠ XSS 防护** |
 | P1-2 | 可选「壳页 + iframe sandbox」模式 | `[延期]` | 合入主线后按需；**默认保持 `direct`**（兼容内联脚本）；`preview.mode: direct \| sandbox` |
 | P1-3 | 更完整安全响应头（管理端与预览策略分离） | `[延期]`（部分基线已有） | 已有 `nosniff` / `Referrer-Policy` / `X-Frame-Options`；严格 CSP 随 P1-2 模式分支，不单独插队 |
-| P1-4 | 管理端：批量删除、服务端分页/筛选 | `[延期]` | 现状客户端分页（每页 20）够用；体量上来再开 |
+| P1-4 | 管理端：批量删除、服务端分页/筛选 | `[已实现]` | SQLite 索引驱动服务端分页/搜索/类型与来源筛选；管理端支持单条和每次最多 100 条批量删除 |
 | P1-5 | 账户：管理端创建账户 / 轮换 token | `[本阶段不做]` | 未定持久化模型前不开工；见 §2、§9 |
 | P1-6 | 配置热重载或账户库热更新 | `[本阶段不做]` | 绑定 P1-5；现状改 yaml 需重启 |
 
@@ -354,7 +354,7 @@ P1-1 落地后：`/` 仍由 **host 主服务**；`/v/*` 在 `proxy_to_render: tr
 | **D** | 有 Docker 的环境验证 sidecar（502 不回退等） | P1-1 验收、§7.4 | 勾掉「实机未验证」；无 Docker 则 PR 标明 |
 | **E** | （可选·延期）最小 `preview.mode: sandbox` | P1-2、P1-3 | 默认仍 `direct` |
 | **F** | （本阶段不做）仅当未来书面定持久化模型后 → 账户 UI | P1-5、P1-6 | 否则保持 yaml + 运行时 disable |
-| **G** | （延期）体量上来再服务端分页；审计；分域 | P1-4、P2-5、P2-1 | 按痛点，不进本轮列车 |
+| **G** | （延期）审计；分域 | P2-5、P2-1 | 管理端批量删除与服务端分页/筛选已完成；其余按痛点推进 |
 
 ### 建议 PR 拆分（评审推荐 · 已采纳为默认）
 

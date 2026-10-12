@@ -7,9 +7,13 @@ const path = require('path');
 const config = require('./lib/config');
 const store = require('./lib/store');
 const accounts = require('./lib/accounts');
+const metadata = require('./lib/metadata');
+const resourceIndex = require('./lib/resource-index');
 const { startCleanupScheduler } = require('./lib/cleanup');
 const { mountPreviewRoutes } = require('./lib/preview-routes');
 const { createPreviewProxy } = require('./lib/preview-proxy');
+const { createPreviewAccess } = require('./lib/preview-access');
+const previewAccess = createPreviewAccess({ store, options: config.access, secureCookie: config.baseUrl.startsWith('https://') });
 
 const app = express();
 app.disable('x-powered-by');
@@ -73,16 +77,25 @@ const upload = multer({
 }).single('file');
 
 function mapItem(m) {
+  const description = m.description || metadata.descriptionFromFile(store.filePath(m), m.type);
   return {
     id: m.id,
     type: m.type,
     filename: m.filename,
     size: m.size,
     source: m.source,
+    description,
     createdAt: m.createdAt,
+    access: previewAccess.info(store.readMeta(m.id) || m),
     url: `${config.baseUrl}/v/${m.id}`,
   };
 }
+
+// 启动时把已有 JSON 元数据迁移/修复到 SQLite 索引；JSON 仍是权威数据源。
+resourceIndex.rebuild(store.listAll().map((item) => ({
+  ...item,
+  description: item.description || metadata.descriptionFromFile(store.filePath(item), item.type),
+})));
 
 // 上传失败时清掉已落盘的临时目录
 function cleanupFailedUpload(req) {
@@ -101,7 +114,7 @@ app.post('/upload', requireToken, (req, res) => {
     });
   }
 
-  upload(req, res, (err) => {
+  upload(req, res, async (err) => {
     if (err) {
       cleanupFailedUpload(req);
       const msg = err.code === 'LIMIT_FILE_SIZE' ? 'file too large' : err.message;
@@ -117,17 +130,43 @@ app.post('/upload', requireToken, (req, res) => {
 
     const id = req.uploadId;
     const filename = safeFilename(req.file.originalname);
+    let createdAccess;
+    try {
+      const mode = req.body.access_mode;
+      if (mode !== undefined && !['public', 'code'].includes(mode)) throw new Error('invalid access_mode');
+      const days = req.body.access_days === undefined ? config.access.defaultDays : Number(req.body.access_days);
+      if (!Number.isFinite(days) || days <= 0 || days > 3650) throw new Error('access_days must be 1-3650');
+      createdAccess = mode === undefined && req.body.access_days === undefined
+        ? await previewAccess.initialPolicy()
+        : await previewAccess.update({}, { mode: mode || 'code', expiresAt: new Date(Date.now() + days * 86400000).toISOString() });
+    } catch (error) {
+      cleanupFailedUpload(req);
+      return res.status(400).json({ error: error.message });
+    }
     const meta = {
+      access: createdAccess.policy,
       id,
       type: req.uploadType,
       filename,
       mime: req.file.mimetype,
       size: req.file.size,
       source: req.uploadSource,
+      description: metadata.descriptionForUpload(
+        store.filePath({ id, type: req.uploadType, filename }),
+        req.uploadType,
+        req.body && req.body.description
+      ),
       createdAt: new Date().toISOString(),
     };
-    store.writeMeta(id, meta);
-    res.json({ url: `${config.baseUrl}/v/${id}`, id, source: meta.source });
+    try {
+      store.writeMeta(id, meta);
+    } catch (error) {
+      cleanupFailedUpload(req);
+      return res.status(500).json({ error: 'unable to save upload metadata' });
+    }
+    res.set('Cache-Control', 'no-store');
+    res.json({ url: `${config.baseUrl}/v/${id}`, id, source: meta.source, description: meta.description,
+      access: previewAccess.info(meta), accessCode: createdAccess.code });
   });
 });
 
@@ -153,7 +192,9 @@ app.delete('/api/me/items/:id', requireToken, (req, res) => {
   res.json({ ok });
 });
 
-// ---- B. 预览接口（公开） ----
+// ---- B. 预览接口：访问验证在直出与 sidecar 代理前统一执行 ----
+app.post('/v/:id/unlock', express.urlencoded({ extended: false, limit: '1kb' }), previewAccess.unlock);
+app.use('/v/:id', previewAccess.requireAccess);
 // proxy_to_render=true：反代到 sidecar；失败返回 502，禁止静默回退到本进程直出
 if (config.preview.proxyToRender) {
   app.use('/v', createPreviewProxy(config.preview));
@@ -188,6 +229,14 @@ app.use(
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
+function requireSameOrigin(req, res, next) {
+  const origin = req.get('origin');
+  if (origin && origin !== config.baseUrl && origin !== `${req.protocol}://${req.get('host')}`) {
+    return res.status(403).json({ error: 'invalid origin' });
+  }
+  next();
+}
+
 function requireAdmin(req, res, next) {
   if (req.session && req.session.user) return next();
   // API 返回 JSON，避免 fetch 跟到登录页 HTML
@@ -218,9 +267,95 @@ app.get('/admin', requireAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'admin.html'));
 });
 
+async function changeAccess(req, res) {
+  const meta = store.readMeta(req.params.id);
+  if (!meta) return res.status(404).json({ error: 'not found' });
+  if (req.account && req.account.name !== meta.source) return res.status(403).json({ error: 'forbidden' });
+  try {
+    const result = await previewAccess.update(meta, req.body);
+    const latest = store.readMeta(meta.id);
+    if (!latest) return res.status(404).json({ error: 'not found' });
+    const updated = { ...latest, access: result.policy };
+    store.writeMeta(meta.id, updated);
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: true, access: previewAccess.info(updated), accessCode: result.code });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+}
+app.patch('/admin/api/item/:id/access', requireAdmin, requireSameOrigin, changeAccess);
+app.patch('/api/me/items/:id/access', requireToken, changeAccess);
+
 app.get('/admin/api/list', requireAdmin, (req, res) => {
-  const items = store.listAll().map(mapItem);
-  res.json({ items });
+  const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 20));
+  const requestedPage = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+  const q = String(req.query.q || '').trim().slice(0, 120).toLowerCase();
+  const type = ['html', 'image', 'video'].includes(req.query.type) ? req.query.type : '';
+  const source = String(req.query.source || '').trim().slice(0, 120);
+  const sort = ['time', 'name', 'size', 'type', 'source'].includes(req.query.sort)
+    ? req.query.sort
+    : 'time';
+  const order = req.query.order === 'asc' ? 'asc' : 'desc';
+
+  const indexed = resourceIndex.listPage({ page: requestedPage, pageSize, q, type, source, sort, order });
+  if (indexed) {
+    return res.json({
+      ...indexed,
+      items: indexed.items.map(mapItem),
+      sources: resourceIndex.sources() || [],
+    });
+  }
+
+  const all = store.listAll().map(mapItem);
+  const sources = [...new Set(all.map((item) => item.source).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'zh'));
+  const filtered = all.filter((item) => {
+    if (type && item.type !== type) return false;
+    if (source && item.source !== source) return false;
+    if (q) {
+      const haystack = [item.filename, item.description, item.source, item.id, item.type, item.url]
+        .map((value) => String(value || '').toLowerCase())
+        .join(' ');
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
+  const direction = order === 'asc' ? 1 : -1;
+  filtered.sort((a, b) => {
+    let left;
+    let right;
+    if (sort === 'name') {
+      left = String(a.filename || '');
+      right = String(b.filename || '');
+    } else if (sort === 'size') {
+      left = Number(a.size) || 0;
+      right = Number(b.size) || 0;
+    } else if (sort === 'type') {
+      left = String(a.type || '');
+      right = String(b.type || '');
+    } else if (sort === 'source') {
+      left = String(a.source || '');
+      right = String(b.source || '');
+    } else {
+      left = new Date(a.createdAt).getTime() || 0;
+      right = new Date(b.createdAt).getTime() || 0;
+    }
+    let result;
+    if (typeof left === 'string') result = left.localeCompare(right, 'zh');
+    else result = left - right;
+    return result === 0 ? String(a.id).localeCompare(String(b.id)) * direction : result * direction;
+  });
+
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(requestedPage, totalPages);
+  const start = (page - 1) * pageSize;
+  res.json({
+    items: filtered.slice(start, start + pageSize),
+    total,
+    page,
+    pageSize,
+    totalPages,
+    sources,
+  });
 });
 
 app.delete('/admin/api/item/:id', requireAdmin, (req, res) => {
@@ -228,6 +363,25 @@ app.delete('/admin/api/item/:id', requireAdmin, (req, res) => {
   if (!store.isValidId(id)) return res.status(400).json({ error: 'bad id' });
   const ok = store.remove(id);
   res.json({ ok });
+});
+
+// 批量删除用于资源较多时的日常清理；每次最多处理 100 个合法 id。
+app.delete('/admin/api/items', requireAdmin, (req, res) => {
+  const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids : [];
+  if (!ids.length || ids.length > 100) {
+    return res.status(400).json({ error: 'ids must contain 1-100 items' });
+  }
+  const uniqueIds = [...new Set(ids.map((id) => String(id)))];
+  if (uniqueIds.some((id) => !store.isValidId(id))) {
+    return res.status(400).json({ error: 'bad id' });
+  }
+  let deleted = 0;
+  let missing = 0;
+  for (const id of uniqueIds) {
+    if (store.remove(id)) deleted++;
+    else missing++;
+  }
+  res.json({ ok: true, deleted, missing });
 });
 
 // 账户列表 + 用量
