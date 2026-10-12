@@ -59,6 +59,8 @@ bash bin/dview upload examples/preview-demo.html --json
 
 ### Admin interface
 
+The admin interface includes resource management and [upload statistics](docs/user-guide.en.md#admin-statistics): today’s uploads, daily trends, a calendar, and source breakdowns. Deleting a file reduces current inventory while preserving upload history. Historical backfill covers surviving files only.
+
 ![vibeview light admin UI with descriptions, access status, sources, and creation dates](docs/assets/admin-light.png)
 
 <p align="center"><sub>Actual admin UI, captured with isolated sample data. The interface is currently in Chinese.</sub></p>
@@ -147,6 +149,8 @@ dview delete Ab3xK9mP2qR7sT1v                      # Delete your resource
 An expired code **does not delete the file**. Older previews are also locked by default; generate a code in the admin UI before sharing. By default, each preview allows 10 failed attempts per 10 minutes, then returns `429`. The limit is shared across IPs and persists through restarts.
 
 Read more about [access protection and retention](docs/user-guide.en.md#access-protection-and-retention).
+
+Administrator login has separate brute-force protection: by default, 10 failed attempts per client per 10 minutes, plus a shared cap of 100 failures. Exceeding either limit returns `429` and `Retry-After`. Counters persist through restarts. See [admin login protection](docs/user-guide.en.md#admin-login-protection).
 
 ## Deployment
 

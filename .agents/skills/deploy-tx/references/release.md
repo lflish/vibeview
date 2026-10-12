@@ -13,6 +13,8 @@ rsync -aR server.js render-server.js package.json package-lock.json \
 
 这是运行时文件白名单，包含未提交文件并保留目录层级。项目新增运行时目录时，先检查用途并更新白名单；不要扩大到配置、数据或秘密文件。记下 `git status`、提交号及快照内容，运行测试应针对这个快照（先 `npm ci`），已验证且与快照完全一致的工作区结果可以复用。
 
+在快照目录运行访问保护测试前，额外复制仓库的 `skill/` 目录作为测试输入：`cp -R skill "$release_stage/"`。其中的上传脚本用于 CLI 兼容性验证；这个测试输入不改变下方运行时同步白名单。
+
 ```bash
 (
   cd "$release_stage"
@@ -25,6 +27,8 @@ rsync -aR server.js render-server.js package.json package-lock.json \
 检查变更清单。使用快照目录内的相对路径：部分 macOS rsync 不支持绝对路径的 `/./` 截断，会错误复制完整本地目录树。`bin/` 是 CLI 冒烟测试所需。不要使用对整个服务目录生效的 `--delete`。已删除的代码文件需单独列出并在备份后移走；不要顺带清理不认识的远端文件。
 
 ## 备份与同步
+
+统计版本还需按 [统计发布验证](statistics.md) 备份资源元数据和独立事件日志。不要把 `statistics.directory` 当作可以删除后重建的 SQLite 索引；它不在代码同步白名单中。
 
 在 SSH 中创建 `/home/lflish/vibeview-releases/<release_id>`（权限 `700`），确认磁盘空间和备份目录未存在，拒绝覆盖旧备份。
 

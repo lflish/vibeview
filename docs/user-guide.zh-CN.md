@@ -119,6 +119,50 @@ curl -fsS -X POST "${DVIEW_URL%/}/upload" \
 
 上传账户在 `config.yaml` 的 `tokens` 中维护；管理端目前不提供创建账户或轮换 token 的功能。修改配置后需要重启主服务。
 
+### 管理端登录保护
+
+管理登录与页面访问码使用独立计数。默认同一客户端 10 分钟内最多失败 10 次，全站共享上限为 100 次，以限制更换 IP 的分布式猜测。超限返回 `429` 和 `Retry-After`，登录页显示冷却倒计时。计数保存在权限为 `600` 的文件中，只记录客户端 IP 的哈希，不记录用户名、密码或上传 token；重启保留限制，冷却后恢复。成功登录清除本客户端失败计数，全站失败计数继续保留。
+
+| 字段 | 默认值 |
+| --- | --- |
+| `admin.login_max_attempts` | `10`，每个客户端的失败上限 |
+| `admin.login_global_max_attempts` | `100`，所有客户端共享的失败上限 |
+| `admin.login_retry_window_minutes` | `10`，计数窗口 / 冷却时间 |
+| `admin.login_attempts_file` | `./data/admin-login-attempts.json` |
+| `server.trust_proxy` | `loopback`，只信任本机反向代理 |
+
+反向代理须正确覆盖或追加实际客户端地址，例如本机 Nginx 的 `X-Forwarded-For $proxy_add_x_forwarded_for`。其他代理部署明确配置其 IP / CIDR；直连部署可设 `server.trust_proxy: false`。不要直接设为 `true` 并信任任意客户端的 IP 请求头。
+
+共享上限触发时，所有访客的新登录都会暂时受限，已登录会话不受影响。计数由单个主服务进程维护；多进程部署需要共享且原子的计数存储。
+
+## 管理统计
+
+从资源管理的「统计」入口进入 `/admin/statistics`。页面提供今日上传、近 7 / 30 天或本月上传、当前文件数和占用空间、每日趋势、月历、类型分布、来源排行以及最近上传/删除活动。来源和类型会联动筛选；点击趋势柱或日历日期可查看当日记录，并分页浏览。
+
+- **累计上传与当前存量分开计算**：成功上传计数一次；文件删除后，上传历史继续保留，当前文件数和占用空间减少。访问码变更不产生上传事件。
+- **时间范围**影响累计上传、趋势、类型/来源分布和活动；当前存量不受日期范围影响。月历按所显示月份统计，并共享来源/类型筛选。
+- **历史覆盖**：首次启用按现存文件的创建时间回填，此前已删除的文件无法恢复。页面显示开始记录时间、历史可能不完整的提示，以及无效元数据的跳过数量；无上传日期显示 0，未来日期不可选。
+- **删除记录**区分管理员删除、上传账户删除和到期清理。已删除文件的原名称不会在统计明细中显示；统计日志不保存原文件名、简介、内容、密码、token 或访问码。
+- **权限**：页面与统计接口仅限已登录的管理员。上传 token 不授予统计访问权限。浅色、深色、跟随系统与其他管理页面共享设置。
+
+```yaml
+statistics:
+  timezone: "Asia/Shanghai"
+  directory: "./data/statistics"
+```
+
+`timezone` 接受有效的 IANA 时区，默认北京时间；统计不依赖浏览器或服务器操作系统时区，夏令时按配置时区处理。相对路径按配置文件所在目录解析；省略 `directory` 时，在 `storage.meta_dir` 旁创建 `statistics/`。
+
+统计目录是独立的持久化事件日志，需要与资源元数据一起备份；它不同于可重建的 `resources.sqlite`。代码同步、回滚和资源清理均应保留日志。该实现由单个主服务进程维护内存缓存；手工修改数据或运行不记录统计的旧版本可能造成覆盖缺口，重新启动只能回填尚存文件。上传/删除中断通过持久化意图恢复，无法解析日志时明确报错，不能清空日志来绕过恢复。详见 [统计 Spec](specs/admin-statistics.md)。
+
+### 统计 API
+
+- `GET /admin/api/statistics?range=30&month=2026-10&source=&type=`：`range` 为 `7`、`30`、`month`；也可显式指定 `from` / `to`（`YYYY-MM-DD`，含首尾，最多 366 天），显式日期优先。`month` 控制月历，默认当月；日期不能位于未来。`source` 为上传来源，`type` 为 `html` / `image` / `video`。
+- 汇总响应包含 `timezone`、`asOf`、`today`、`filters`、`coverage`、`summary`、`daily`、`calendar`、`types`、`sources`、`availableSources`、`activities`、`deletionActivities`。`coverage.startedAt` 是记录起点，`completeFromDate` 是其下一自然日，`periodComplete` 表示所选范围是否位于完整记录期且未混入回填记录。
+- `GET /admin/api/statistics/day?date=2026-10-12&page=1&pageSize=20`：支持相同来源/类型筛选，`pageSize` 最大 100。响应包含 `count`、`bytes`、`retainedCount`、`items` 和分页信息；已删除项 `retained: false`、`filename: null`。
+
+两个接口均要求管理员 session，返回 `Cache-Control: no-store`。未登录（包括只有上传 token）返回 401，非法日期、筛选或分页返回 400。
+
 ## 访问保护与文件保留
 
 这三个概念各有用途：
@@ -202,6 +246,8 @@ npm start
 | `GET /v/:id` | 公开，或已验证的预览 cookie | 预览页面；未授权时显示访问码表单 |
 | `POST /v/:id/unlock` | 表单中的 `code` | 验证访问码并设置预览 cookie |
 | `GET /v/:id/raw` | 与预览页相同 | 获取原文件，支持 Range 请求 |
+| `GET /admin/api/statistics` | 管理员 session | 概览、趋势、月历、分布与活动 |
+| `GET /admin/api/statistics/day` | 管理员 session | 当日上传事件与分页明细 |
 | `GET /admin/api/list` | 管理员 session | 分页、搜索、筛选和排序 |
 | `PATCH /admin/api/item/:id/access` | 管理员 session | 生成 / 重置 / 修改访问保护 |
 | `DELETE /admin/api/item/:id` | 管理员 session | 删除单条资源 |
@@ -218,6 +264,8 @@ npm start
 
 ```bash
 npm test                          # 保留期、简介、索引、上传与管理冒烟
+npm run test:statistics            # 统计口径、持久化恢复与 API
+npm run test:admin-login           # 管理登录的防暴力破解与代理来源校验
 npm run test:access                # 访问保护、重试限制、Sidecar 防绕过
 npm run smoke:render               # 渲染测试；Docker 可用时额外验证真实容器
 
@@ -225,6 +273,8 @@ npm run smoke:render               # 渲染测试；Docker 可用时额外验证
 npm run test:admin
 npm run test:theme
 npm run test:access -- --browser
+npm run test:admin-login -- --browser
+npm run test:statistics -- --browser
 ```
 
 测试使用临时配置与数据，不操作现有资源。`SMOKE_SKIP_RENDER=1 npm test` 可跳过默认测试中的渲染检查；浏览器测试依赖需要自行准备。

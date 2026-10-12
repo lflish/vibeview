@@ -242,6 +242,7 @@
 
   <main>
     <div class="tabs" role="tablist">
+      <a class="tab" href="/admin/statistics" style="text-decoration:none">统计</a>
       <button type="button" class="tab active" data-panel="resources" role="tab">资源</button>
       <button type="button" class="tab" data-panel="accounts" role="tab">账户</button>
     </div>
@@ -1172,6 +1173,8 @@
 
   load();
 })();
+
+if (location.hash === '#accounts') document.querySelector('[data-panel=accounts]').click();
 </script>
 </body>
 </html>

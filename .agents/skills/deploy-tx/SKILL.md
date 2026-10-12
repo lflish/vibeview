@@ -20,7 +20,7 @@ description: 发布当前 vibeview 项目到 TX 服务器，包括发布前检�
 
 这些值是本项目已验证的部署约定，每次发布先核实连接和服务。不要操作同机其他 PM2 应用。
 
-保留服务器的 `config.yaml`、`data/`、环境变量、证书和 Nginx 配置。不要把本地配置、上传数据或 `node_modules/` 覆盖到服务器。JSON 元数据在 `data/meta/`，SQLite 索引在主服务启动时重建；代码回滚不回滚用户数据。
+保留服务器的 `config.yaml`、`data/`、环境变量、证书和 Nginx 配置。不要把本地配置、上传数据或 `node_modules/` 覆盖到服务器。JSON 元数据在 `data/meta/`，resources.sqlite 索引在主服务启动时重建；独立的 statistics.directory 事件日志不可重建，必须保留并备份。代码回滚不回滚用户数据。
 
 现有配置为 `preview.proxy_to_render: true`、`preview.render_url: http://127.0.0.1:3213`、`storage.retention_days: 0`。仅在任务涉及配置时修改对应字段，不打印账号、口令和 token。
 
@@ -34,8 +34,8 @@ description: 发布当前 vibeview 项目到 TX 服务器，包括发布前检�
    bash .agents/skills/deploy-tx/scripts/check.sh
    ```
    区分原有故障和新回归。SSH、磁盘或备份失败时停止发布；仅公网证书失败不等于本地服务失败，也不能报告完整验证通过。
-3. 本地运行 `SMOKE_SKIP_RENDER=1 npm test`。访问保护有改动时运行 `npm run test:access`，覆盖持久化重试限制、原文件授权及 Sidecar 防绕过。管理界面有改动时运行 `npm run test:admin`，需要可用的 Playwright 和 Chromium；缺失时明确记录，不声称通过。渲染相关改动需要可用 Docker 的环境运行 `npm run smoke:render`。读取测试脚本，确认使用隔离数据后再在服务器运行测试。
-4. 按 [发布与回滚操作](references/release.md) 创建固定发布快照、备份线上代码、预演同步、发布、更新依赖、重建 sidecar 和重启主服务。不要在测试后继续从可能变化的工作区直接同步。
+3. 本地运行 `SMOKE_SKIP_RENDER=1 npm test`（包含统计接口与事件恢复测试）。统计页面有改动时另运行 `npm run test:statistics -- --browser`。访问保护有改动时运行 `npm run test:access`，覆盖持久化重试限制、原文件授权及 Sidecar 防绕过。管理界面有改动时运行 `npm run test:admin`，需要可用的 Playwright 和 Chromium；缺失时明确记录，不声称通过。渲染相关改动需要可用 Docker 的环境运行 `npm run smoke:render`。读取测试脚本，确认使用隔离数据后再在服务器运行测试。
+4. 涉及统计功能时先读 [统计发布验证](references/statistics.md)，核实日志路径、备份和完整性边界。按 [发布与回滚操作](references/release.md) 创建固定发布快照、备份线上代码、预演同步、发布、更新依赖、重建 sidecar 和重启主服务。不要在测试后继续从可能变化的工作区直接同步。
 5. 再次运行只读检查，核对远端代码与发布快照的校验和。对本次功能做实际验证；页面修改还应检查服务返回的内容，不能只看磁盘文件。
 6. 主服务或 sidecar 因本次发布无法恢复时，执行该次备份的代码回滚并重新验证。不要对失败发布无限重试；同一原因一次修复仍失败时保留证据并报告阻塞。
 

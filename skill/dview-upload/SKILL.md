@@ -68,6 +68,14 @@ https://view.example.com/v/Ab3xK9mP2qR7sT1v
 
 受保护预览需要先在验证表单输入访问码，自动验证应使用 `POST /v/<id>/unlock` 并保留服务端 cookie；原文件也需要授权。遇到 429 遵守 `Retry-After` 并停止猜码，不要换 IP 或循环重试。受保护 HTML 使用浏览器 sandbox，脚本访问 localStorage 时应捕获异常并回退到内存中的主题状态。
 
+## 上传与管理统计
+
+成功上传会产生一条上传事件；重复上传同一文件得到新 ID，也会增加一次上传。删除文件会减少当前存量，但不会扣减历史上传量；访问码重置或过期不算上传/删除。
+
+真实统计在管理员 `/admin/statistics` 页面，API 为 `/admin/api/statistics` 和 `/admin/api/statistics/day`，要求管理员 session。上传 token 不授予管理统计权限，不要使用 Bearer token 冒充管理会话。此 Skill 不替用户申请或绕过管理员权限。
+
+生成统计报告时注明日期范围、服务端响应的 `timezone` 和 `coverage`。上线前只能回填仍存在的文件，不能将其当作完整历史上传量。没有真实统计数据时明确标注演示数据，不能把 `dview list` 中的现存文件数量当成历史累计上传。继续遵循默认浅色、访问码及有效期的分享规则。
+
 ## 示例
 
 ```bash
