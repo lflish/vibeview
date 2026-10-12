@@ -5,6 +5,9 @@ server:
   port: 3000
   # 生成预览链接用的对外地址（不要带结尾斜杠）
   base_url: "http://localhost:3000"
+  # 仅信任本机反向代理。直连部署可设 false；代理需覆盖/追加真实客户端 IP。
+  # 使用其他代理地址时明确配置其 IP/CIDR，不要盲目设为 true。
+  trust_proxy: "loopback"
 
 storage:
   # 按类型分目录存储；每个文件落在 <type_dir>/<id>/<原文件名>
@@ -50,6 +53,19 @@ admin:
   password: "replace-with-a-strong-password"
   # session 加密密钥，随便填一长串随机字符： openssl rand -hex 32
   session_secret: "replace-with-a-random-session-secret"
+  # 管理登录：同一客户端 10 分钟最多失败 10 次；共享上限防止换 IP 猜码。
+  login_max_attempts: 10
+  login_global_max_attempts: 100
+  login_retry_window_minutes: 10
+  # 持久化计数，重启不清空；单个主服务进程拥有此文件。
+  login_attempts_file: "./data/admin-login-attempts.json"
+
+# 管理统计：独立持久化事件，不随资源删除或索引重建清空。
+statistics:
+  timezone: "Asia/Shanghai"
+  # 缺省为 storage.meta_dir 旁的 statistics/；发布/回滚保留，备份包含此目录。
+  # 单个主服务进程拥有日志；不与资源目录共用。
+  directory: "./data/statistics"
 
 # 预览渲染 sidecar（可选）。默认关闭：主服务本地直出 /v（无 Docker 开发）。
 # 生产：docker compose up -d 起 render 后设 proxy_to_render: true

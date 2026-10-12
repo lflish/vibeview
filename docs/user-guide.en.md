@@ -119,6 +119,50 @@ At `/admin`, you can:
 
 Upload accounts are maintained in `config.yaml` under `tokens`. The admin UI does not currently create accounts or rotate upload tokens. Restart the main service after changing configuration.
 
+### Admin login protection
+
+Admin login and preview access codes use separate counters. Defaults are 10 failures per client per 10 minutes and a shared cap of 100 failures to bound distributed guesses across IPs. Exceeding either limit returns `429` with `Retry-After`; the login page shows a cooldown countdown. State is stored in a file with mode `600`, containing hashed client IP keys, never usernames, passwords, or upload tokens. Limits survive restarts and expire after the window. Successful login clears that client's failures while retaining shared failures.
+
+| Field | Default |
+| --- | --- |
+| `admin.login_max_attempts` | `10`, failures per client |
+| `admin.login_global_max_attempts` | `100`, shared failures across clients |
+| `admin.login_retry_window_minutes` | `10`, counter / cooldown window |
+| `admin.login_attempts_file` | `./data/admin-login-attempts.json` |
+| `server.trust_proxy` | `loopback`, trust only local reverse proxies |
+
+The reverse proxy must correctly overwrite or append the actual client address, such as local Nginx using `X-Forwarded-For $proxy_add_x_forwarded_for`. Configure explicit IPs / CIDRs for other proxies; direct deployments can set `server.trust_proxy: false`. Do not blindly set this to `true` and trust arbitrary client IP headers.
+
+Reaching the shared cap temporarily blocks all new administrator logins; existing sessions remain usable. One main-service process owns the counters. Multiple processes require shared atomic counter storage.
+
+## Admin statistics
+
+Open `/admin/statistics` using the statistics link in resource management. The page includes today's uploads, the last 7 / 30 days or current month, current file count and storage, daily trends, a calendar, type/source breakdowns, and recent upload/deletion activity. Source and type filters apply across the page; select a chart bar or calendar date to inspect paginated daily records.
+
+- **Uploads and current inventory are distinct**: a successful upload is counted once. Deleting its file preserves upload history while reducing current count and storage. Access-code changes do not create upload events.
+- **Date ranges** affect upload totals, trends, breakdowns, and activity. Current inventory ignores the date range. The calendar uses its displayed month and shares source/type filters.
+- **Historical coverage**: first startup backfills existing files using their creation times. Previously deleted files cannot be reconstructed. The page shows the capture start time, incomplete-history notice, and skipped invalid metadata count. Empty days show zero; future dates cannot be selected.
+- **Deletion events** distinguish administrator deletion, upload-account deletion, and retention cleanup. Deleted filenames are hidden in statistics. Event logs never store original filenames, descriptions, file content, passwords, upload tokens, or access codes.
+- **Access**: statistics pages and APIs require an authenticated administrator session. Upload tokens do not grant access. Light, dark, and system themes share the existing admin preference.
+
+```yaml
+statistics:
+  timezone: "Asia/Shanghai"
+  directory: "./data/statistics"
+```
+
+`timezone` accepts valid IANA time zones and defaults to Beijing time. Grouping is independent of browser/OS time zones and accounts for daylight saving time. Relative paths resolve from the configuration directory; when omitted, the statistics directory is created next to `storage.meta_dir`.
+
+Back up the statistics journal together with resource metadata. It is persistent history, unlike the rebuildable `resources.sqlite` index. Preserve it during code sync, rollback, and resource cleanup. One main-service process owns the in-memory cache. Manual data edits or running an older version that does not record events can introduce coverage gaps; restarting can only backfill surviving files. Durable intents recover interrupted uploads/deletions. Invalid journals produce explicit errors; do not clear them to bypass recovery. See the [statistics specification (Chinese)](specs/admin-statistics.md).
+
+### Statistics API
+
+- `GET /admin/api/statistics?range=30&month=2026-10&source=&type=`: `range` is `7`, `30`, or `month`. Explicit `from` / `to` dates (`YYYY-MM-DD`, inclusive, at most 366 days) take precedence. `month` selects the calendar month and defaults to the current month; future dates are rejected. `source` is an upload source and `type` is `html`, `image`, or `video`.
+- The response contains `timezone`, `asOf`, `today`, `filters`, `coverage`, `summary`, `daily`, `calendar`, `types`, `sources`, `availableSources`, `activities`, and `deletionActivities`. `coverage.startedAt` marks the capture start; `completeFromDate` is the following local date. `periodComplete` means the range is in the complete capture period and contains no backfilled uploads.
+- `GET /admin/api/statistics/day?date=2026-10-12&page=1&pageSize=20`: accepts the same source/type filters, with `pageSize` capped at 100. Returns `count`, `bytes`, `retainedCount`, `items`, and pagination. Deleted items have `retained: false` and `filename: null`.
+
+Both endpoints require an administrator session and return `Cache-Control: no-store`. Unauthenticated requests, including upload-token-only requests, receive 401; invalid dates, filters, or pagination receive 400.
+
 ## Access protection and retention
 
 These three settings serve different purposes:
@@ -202,6 +246,8 @@ For `NET::ERR_CERT_DATE_INVALID`, check the validity of the certificate actually
 | `GET /v/:id` | Public, or a verified preview cookie | Show the preview; show the code form when unauthorized |
 | `POST /v/:id/unlock` | Form field `code` | Verify a code and set a preview cookie |
 | `GET /v/:id/raw` | Same as the preview | Retrieve the original file; supports Range requests |
+| `GET /admin/api/statistics` | Admin session | Summary, trends, calendar, breakdowns, and activity |
+| `GET /admin/api/statistics/day` | Admin session | Paginated upload events for one day |
 | `GET /admin/api/list` | Administrator session | Pagination, search, filtering, sorting |
 | `PATCH /admin/api/item/:id/access` | Administrator session | Generate / reset / change access protection |
 | `DELETE /admin/api/item/:id` | Administrator session | Delete a resource |
@@ -218,6 +264,8 @@ The admin list accepts `page`, `pageSize` (maximum 100), `q`, `type`, `source`, 
 
 ```bash
 npm test                          # Retention, descriptions, index, upload/admin smoke
+npm run test:statistics            # Statistics, durable recovery, and APIs
+npm run test:admin-login           # Admin brute-force protection and proxy IP handling
 npm run test:access                # Access protection, retry limits, sidecar bypass prevention
 npm run smoke:render               # Render tests; adds a real container check when Docker is available
 
@@ -225,6 +273,8 @@ npm run smoke:render               # Render tests; adds a real container check w
 npm run test:admin
 npm run test:theme
 npm run test:access -- --browser
+npm run test:admin-login -- --browser
+npm run test:statistics -- --browser
 ```
 
 Tests use temporary configuration and data rather than existing resources. Use `SMOKE_SKIP_RENDER=1 npm test` to skip the render checks in the default suite. Browser-test dependencies must be provided separately.

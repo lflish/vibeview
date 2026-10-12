@@ -9,14 +9,18 @@ const store = require('./lib/store');
 const accounts = require('./lib/accounts');
 const metadata = require('./lib/metadata');
 const resourceIndex = require('./lib/resource-index');
+const statistics = require('./lib/statistics');
 const { startCleanupScheduler } = require('./lib/cleanup');
 const { mountPreviewRoutes } = require('./lib/preview-routes');
 const { createPreviewProxy } = require('./lib/preview-proxy');
-const { createPreviewAccess } = require('./lib/preview-access');
+const { createPreviewAccess, constantEqual } = require('./lib/preview-access');
+const { createAdminLoginProtection } = require('./lib/admin-login');
 const previewAccess = createPreviewAccess({ store, options: config.access, secureCookie: config.baseUrl.startsWith('https://') });
+const adminLogin = createAdminLoginProtection(config.admin);
 
 const app = express();
 app.disable('x-powered-by');
+app.set('trust proxy', config.trustProxy);
 
 // 确保存储目录存在
 for (const d of [
@@ -92,6 +96,7 @@ function mapItem(m) {
 }
 
 // 启动时把已有 JSON 元数据迁移/修复到 SQLite 索引；JSON 仍是权威数据源。
+statistics.initialize();
 resourceIndex.rebuild(store.listAll().map((item) => ({
   ...item,
   description: item.description || metadata.descriptionFromFile(store.filePath(item), item.type),
@@ -188,7 +193,7 @@ app.delete('/api/me/items/:id', requireToken, (req, res) => {
   if (meta.source !== req.account.name) {
     return res.status(403).json({ error: 'forbidden: not your resource' });
   }
-  const ok = store.remove(id);
+  const ok = store.remove(id, 'owner');
   res.json({ ok });
 });
 
@@ -246,16 +251,49 @@ function requireAdmin(req, res, next) {
   res.redirect('/admin/login');
 }
 
+app.get('/admin/statistics', requireAdmin, (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'views', 'statistics.html'));
+});
+for (const [route, query] of [
+  ['/admin/api/statistics', req => statistics.summary(req.query)],
+  ['/admin/api/statistics/day', req => statistics.day(req.query)],
+]) {
+  app.get(route, (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); }, requireAdmin, (req, res, next) => {
+    try { res.json(query(req)); }
+    catch (error) {
+      if (error.status === 400) return res.status(400).json({ error: error.message });
+      next(error);
+    }
+  });
+}
+
 app.get('/admin/login', (req, res) => {
+  res.set('Cache-Control', 'no-store');
   res.sendFile(path.join(__dirname, 'views', 'login.html'));
 });
 
-app.post('/admin/login', (req, res) => {
-  const { user, password } = req.body || {};
-  if (user === config.admin.user && password === config.admin.password && config.admin.password) {
-    req.session.user = user;
-    return res.redirect('/admin');
+app.post('/admin/login', requireSameOrigin, (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  const limit = adminLogin.check(req);
+  if (!limit.allowed) {
+    res.set('Retry-After', String(limit.retryAfter));
+    const page = fs.readFileSync(path.join(__dirname, 'views', 'login.html'), 'utf8')
+      .replace('data-login-retry-after="0"', `data-login-retry-after="${limit.retryAfter}"`);
+    return res.status(429).type('html').send(page);
   }
+  const { user, password } = req.body || {};
+  const userMatches = typeof user === 'string' && constantEqual(user, config.admin.user);
+  const passwordMatches = typeof password === 'string' && constantEqual(password, config.admin.password);
+  if (userMatches && passwordMatches && config.admin.password) {
+    adminLogin.succeeded(req);
+    return req.session.regenerate(error => {
+      if (error) return next(error);
+      req.session.user = user;
+      req.session.save(error => error ? next(error) : res.redirect('/admin'));
+    });
+  }
+  adminLogin.failed(req);
   res.redirect('/admin/login?error=1');
 });
 
@@ -412,11 +450,7 @@ app.post('/admin/api/accounts/:name/enable', requireAdmin, (req, res) => {
 
 // ---- 首页 ----
 app.get('/', (req, res) => {
-  res
-    .type('html')
-    .send(
-      '<h1>vibeview</h1><p>通用预览服务。上传见 README，管理端 <a href="/admin">/admin</a>。</p>'
-    );
+  res.sendFile(path.join(__dirname, 'views', 'home.html'));
 });
 
 // ---- 启动 ----

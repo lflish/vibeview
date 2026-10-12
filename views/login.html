@@ -67,7 +67,7 @@
 </style>
 <link rel="stylesheet" href="/admin/theme.css">
 </head>
-<body>
+<body data-login-retry-after="0">
   <form class="box" method="post" action="/admin/login" id="login-form">
     <label class="theme-picker" for="theme-select">主题
       <select id="theme-select" aria-label="主题">
@@ -95,6 +95,21 @@
   <script>
     (function () {
       var err = document.getElementById('err');
+      var retryAfter = Number(document.body.dataset.loginRetryAfter);
+      if (retryAfter > 0) {
+        var deadline = Date.now() + retryAfter * 1000;
+        var submit = document.getElementById('submit');
+        err.classList.add('show');
+        function countdown() {
+          var remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+          submit.disabled = remaining > 0;
+          submit.textContent = remaining > 0 ? remaining + ' 秒后重试' : '登录';
+          err.textContent = remaining > 0 ? '登录尝试次数过多，请等待 ' + remaining + ' 秒后重试。' : '可以重新登录，请确认账号和密码。';
+          if (!remaining) clearInterval(timer);
+        }
+        var timer = setInterval(countdown, 1000);
+        countdown();
+      }
       if (new URLSearchParams(location.search).get('error')) {
         err.textContent = '账号或密码错误，请重试';
         err.classList.add('show');
