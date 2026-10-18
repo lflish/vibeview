@@ -70,7 +70,7 @@ bash bin/dview upload /path/to/report.html --json
 }
 ```
 
-浏览器打开 `url`，输入 `accessCode` 即可预览。**保存访问码和到期时间，建议将访问码与链接分开分享。** 服务端只保存访问码哈希，忘记后需要重置，不能查询原码。
+浏览器打开 `url`，输入 `accessCode` 即可预览。**保存访问码和到期时间，建议将访问码与链接分开分享。** 服务端用哈希验证访问码，另存一份加密副本供管理员在管理端查看；上传 token 的 API 只在生成时返回访问码。
 
 ## 上传与分享
 
@@ -98,7 +98,29 @@ curl -fsS -X POST "${DVIEW_URL%/}/upload" \
   --form-string "description=季度报告与关键指标"
 ```
 
-可选表单字段：`access_days=7` 指定访问码有效天数，`access_mode=public` 明确开放公开访问。未指定时按服务端默认配置处理。
+可选表单字段：`access_days=7` 指定访问码有效天数，`access_mode=public` 明确开放公开访问。未指定时按服务端默认配置处理。分类字段见下一节。
+
+### 分类、项目与标签
+
+每个资源可以记录「这是什么页面、属于哪个项目、由哪个 agent 生成」，便于在资源很多时筛选和整理：
+
+| 字段 | 说明 |
+| --- | --- |
+| `category` | 页面用途，固定取值：`doc` 开发文档、`report` 报告、`dashboard` 数据看板、`prototype` 原型、`game` 游戏、`slides` 幻灯片、`tool` 工具、`demo` 演示、`screenshot` 截图、`other` 其他。未知值归为 `other`，不传为未分类 |
+| `project` | 所属项目；CLI 默认取文件或当前目录所在 git 仓库的目录名 |
+| `agent` / `model` | 生成文件的 agent 与模型；CLI 默认从 `AI_AGENT`、`CLAUDECODE` 等环境变量识别 agent |
+| `tags` | 自由标签，逗号分隔或重复传入，最多 8 个 |
+
+```bash
+dview upload ./snake.html --json --category game --tag h5,canvas --model claude-opus-5-5
+dview list --category report --project vibeview   # 按分类 / 项目 / --tag 筛选
+dview edit Ab3xK9mP2qR7sT1v --category doc --tag onboarding
+dview edit Ab3xK9mP2qR7sT1v --tag ''               # 清空标签
+```
+
+`DVIEW_AGENT`、`DVIEW_MODEL`、`DVIEW_PROJECT` 可设置默认值，`--no-detect` 关闭自动识别。curl 上传使用同名表单字段；HTML 也可以在页面中声明 `<meta name="dview:category" content="game">`、`dview:tags` 等，作为未传字段时的兜底。值会统一转为小写短横线形式。
+
+这些字段由上传方自报，只用于整理和筛选，不参与权限判断；可信的上传身份仍是「来源」（token 对应的账户）。上传后可在管理端或用 `dview edit` 修改。
 
 ### AI Skill 与工具接入
 
@@ -111,10 +133,13 @@ curl -fsS -X POST "${DVIEW_URL%/}/upload" \
 
 访问 `/admin` 可以：
 
-- 查看文件名、简介、来源、大小、创建时间、持续时长和访问保护状态。
-- 搜索文件名、简介、来源或 ID，按类型 / 来源筛选，排序和分页浏览。
-- 复制预览链接，删除单条资源或批量删除当前页选中资源。
-- 在「访问保护」中生成 / 重置访问码，设置到期时间、不过期或免验证。
+- 查看文件名、简介、来源、大小、创建时间、持续时长；「访问」列显示保护状态与剩余有效期。
+- 每行显示分类、项目、agent / 模型与标签，点击即可只看同类；未分类的资源可直接点「未分类」补充。
+- 勾选多项后，底部操作栏可批量设置分类与项目、追加标签或删除。
+- 窄屏下资源以卡片显示，筛选项收进「筛选」按钮。
+- 搜索文件名、简介、项目、标签或 ID，按类型 / 来源 / 分类 / 项目 / agent / 标签筛选（下拉框显示各值数量），排序和分页浏览。
+- 「复制分享」一键复制页面简介、链接、访问码与有效期，可直接发送；「⋯」菜单中可仅复制链接、打开访问设置、编辑分类或删除。
+- 在「访问」列查看 / 复制访问码；在访问设置中生成 / 重置访问码，设置到期时间、不过期或免验证。升级前生成的访问码无法查看，重置后即可查看。
 - 查看各账户的用量与配额，停用 / 启用账户，切换管理页面主题。
 
 上传账户在 `config.yaml` 的 `tokens` 中维护；管理端目前不提供创建账户或轮换 token 的功能。修改配置后需要重启主服务。
@@ -144,6 +169,18 @@ curl -fsS -X POST "${DVIEW_URL%/}/upload" \
 - **历史覆盖**：首次启用按现存文件的创建时间回填，此前已删除的文件无法恢复。页面显示开始记录时间、历史可能不完整的提示，以及无效元数据的跳过数量；无上传日期显示 0，未来日期不可选。
 - **删除记录**区分管理员删除、上传账户删除和到期清理。已删除文件的原名称不会在统计明细中显示；统计日志不保存原文件名、简介、内容、密码、token 或访问码。
 - **权限**：页面与统计接口仅限已登录的管理员。上传 token 不授予统计访问权限。浅色、深色、跟随系统与其他管理页面共享设置。
+- **按项目**：项目由上传方自报（默认取 git 仓库名）。统计页可按项目筛选，并列出各项目的上传数、当前文件数和打开次数；仍保留的资源按当前项目统计，已删除的按上传时的项目统计。资源管理页顶部的项目导航可以像目录一样切换项目。
+
+### 访问统计
+
+统计页的「访问情况」与资源管理的「打开」列展示预览链接的使用情况：
+
+- **打开次数**：访客打开预览页（`GET /v/:id`）计 1 次。原文件请求（`/raw`）不计；管理员登录后的预览、链接预览爬虫与脚本客户端（如 Slackbot、curl）单独计数，不计入打开次数。
+- **访问码验证**：分别统计验证页展示、验证成功、失败、被限流，以及打开已过期链接的次数，用于判断访问码是否发出、是否有人猜码、哪些链接需要续期。
+- **从未打开**：资源管理可按「从未打开 / 30 天未打开 / 7 天内打开过」筛选，也可按打开次数或最近打开时间排序，便于清理。
+- **访问码状态**：汇总当前资源中有效、3 天内到期、已过期、未设置访问码和公开的数量，不受时间范围影响。
+- **隐私**：只保存「资源 × 天」的计数和首次 / 最后打开时间，不记录 IP、UA 或单次访问。计数先在内存累加，每 30 秒及正常退出时写入 `statistics.directory` 下的 `visits.sqlite`；强制结束进程最多丢失 30 秒计数。按天明细保留 400 天。
+- 访问统计从新版本首次启动时开始记录，此前的访问无法补录；统计开始前上传且之后未被打开的资源显示「暂无记录」，不标为「从未打开」。需要 Node.js 内置 SQLite；不可用时页面会提示，上传统计不受影响。
 
 ```yaml
 statistics:
@@ -161,7 +198,9 @@ statistics:
 - 汇总响应包含 `timezone`、`asOf`、`today`、`filters`、`coverage`、`summary`、`daily`、`calendar`、`types`、`sources`、`availableSources`、`activities`、`deletionActivities`。`coverage.startedAt` 是记录起点，`completeFromDate` 是其下一自然日，`periodComplete` 表示所选范围是否位于完整记录期且未混入回填记录。
 - `GET /admin/api/statistics/day?date=2026-10-12&page=1&pageSize=20`：支持相同来源/类型筛选，`pageSize` 最大 100。响应包含 `count`、`bytes`、`retainedCount`、`items` 和分页信息；已删除项 `retained: false`、`filename: null`。
 
-两个接口均要求管理员 session，返回 `Cache-Control: no-store`。未登录（包括只有上传 token）返回 401，非法日期、筛选或分页返回 400。
+- `GET /admin/api/statistics/visits?from=2026-09-19&to=2026-10-18&project=&source=&type=`：访问统计。`project` 传 `-` 表示未设置项目（上传统计接口同样支持 `project`）。响应包含 `totals`（`views`、`admin_views`、`bots`、`challenges`、`unlock_ok`、`unlock_fail`、`rate_limited`、`expired_hits`）、`daily`、`top`、`projects`、`neverViewed`、`viewedInRange`、`current`、`accessStatus` 和 `startedAt`。
+
+以上接口均要求管理员 session，返回 `Cache-Control: no-store`。未登录（包括只有上传 token）返回 401，非法日期、筛选或分页返回 400。
 
 ## 访问保护与文件保留
 
@@ -192,6 +231,7 @@ statistics:
 | `access.default_days` / `grant_minutes` | `7` 天 / `30` 分钟的预览授权 |
 | `access.max_attempts` / `retry_window_minutes` | `10` 次 / `10` 分钟 |
 | `access.attempts_file` | `./data/preview-attempts.json`，失败计数文件 |
+| `access.code_secret` | 缺省使用 `admin.session_secret`；加密访问码副本的密钥，更换后已有访问码需重置才能查看（仍可正常验证）。也可用 `DVIEW_ACCESS_CODE_SECRET` |
 | `preview.proxy_to_render` / `render_url` | `false` / `http://127.0.0.1:3001` |
 
 配置默认从项目根目录的 `config.yaml` 读取，可通过 `DVIEW_CONFIG_PATH`（或 `CONFIG_PATH`）指定其他文件。相对存储路径按**配置文件所在目录**解析。启用自动清理时，主服务启动即清理一次，之后每 6 小时执行一次；已删除的文件无法通过调整配置恢复。
@@ -243,33 +283,42 @@ npm start
 | `GET /api/me/items` | Bearer 上传 token | 列出本账户资源 |
 | `DELETE /api/me/items/:id` | Bearer 上传 token | 删除本账户资源 |
 | `PATCH /api/me/items/:id/access` | Bearer 上传 token | 修改本账户资源的访问保护 |
+| `PATCH /api/me/items/:id/meta` | Bearer 上传 token | 修改本账户资源的分类、项目、agent、模型、标签或简介 |
 | `GET /v/:id` | 公开，或已验证的预览 cookie | 预览页面；未授权时显示访问码表单 |
 | `POST /v/:id/unlock` | 表单中的 `code` | 验证访问码并设置预览 cookie |
 | `GET /v/:id/raw` | 与预览页相同 | 获取原文件，支持 Range 请求 |
 | `GET /admin/api/statistics` | 管理员 session | 概览、趋势、月历、分布与活动 |
 | `GET /admin/api/statistics/day` | 管理员 session | 当日上传事件与分页明细 |
+| `GET /admin/api/statistics/visits` | 管理员 session | 打开次数、访问码验证、热门资源、按项目分布与访问码状态 |
 | `GET /admin/api/list` | 管理员 session | 分页、搜索、筛选和排序 |
 | `PATCH /admin/api/item/:id/access` | 管理员 session | 生成 / 重置 / 修改访问保护 |
+| `GET /admin/api/item/:id/access-code` | 管理员 session | 读取当前访问码；公开或无法读取时返回 `409` |
+| `PATCH /admin/api/item/:id/meta` | 管理员 session | 修改分类、项目、agent、模型、标签或简介 |
+| `PATCH /admin/api/items/meta` | 管理员 session | 批量整理，JSON 为 `{"ids":[...],"category":"report","project":"x","addTags":"q3"}`，最多 100 条；未给出的字段保持不变，标签为追加 |
 | `DELETE /admin/api/item/:id` | 管理员 session | 删除单条资源 |
 | `DELETE /admin/api/items` | 管理员 session | 批量删除，JSON 为 `{"ids":["id1","id2"]}`，最多 100 条 |
 | `GET /admin/api/accounts` | 管理员 session | 账户列表与用量 |
 | `POST /admin/api/accounts/:name/disable` 或 `/enable` | 管理员 session | 停用或启用账户 |
 | `GET /healthz` | 无 | 主服务或 sidecar 的浅健康检查 |
 
-访问保护的 PATCH body 使用 `mode: "code"` 或 `"public"`、`expiresAt`（ISO 时间或 `null` 表示不过期）、`reset: true`（重新生成）。新访问码仅在生成响应中返回，列表不会返回原码或哈希。
+访问保护的 PATCH body 使用 `mode: "code"` 或 `"public"`、`expiresAt`（ISO 时间或 `null` 表示不过期）、`reset: true`（重新生成）。列表不会返回原码或哈希；管理员通过 `access-code` 接口按需读取，响应 `no-store`。
 
-管理列表支持 `page`、`pageSize`（最大 100）、`q`、`type`、`source`、`sort=time|name|size|type|source`、`order=asc|desc`；响应包含 `items`、`total`、`page`、`pageSize`、`totalPages`、`sources`。
+管理列表支持 `page`、`pageSize`（最大 100）、`q`、`type`、`source`、`category`（`none` 表示未分类）、`project`、`agent`、`tag`、`sort=time|name|size|type|source|category|project|agent`、`order=asc|desc`；响应包含 `items`、`total`、`page`、`pageSize`、`totalPages`、`sources`、`categories`（可选分类）与 `facets`（各分类维度的取值与数量）。`GET /api/me/items` 也接受 `q`、`type`、`category`、`project`、`agent`、`tag`。
+
+分类 PATCH body 可包含 `category`、`project`、`agent`、`model`、`tags`（数组或逗号分隔字符串）、`description` 中的任意字段，只修改出现的字段；空字符串表示清空，`description` 清空后回退为页面标题。
 
 ## 开发与测试
 
 ```bash
-npm test                          # 保留期、简介、索引、上传与管理冒烟
-npm run test:statistics            # 统计口径、持久化恢复与 API
+npm test                          # 保留期、简介、分类、索引、上传与管理冒烟
+npm run test:statistics            # 统计口径、持久化恢复与 API（含访问统计）
+npm run test:visits                # 访问计数口径、筛选排序、退出时写盘
 npm run test:admin-login           # 管理登录的防暴力破解与代理来源校验
 npm run test:access                # 访问保护、重试限制、Sidecar 防绕过
 npm run smoke:render               # 渲染测试；Docker 可用时额外验证真实容器
 
-# 以下需要环境中可用的 Playwright 和 Chromium
+# 以下需要 Playwright 和 Chromium：npm install 会安装 devDependencies 中固定版本的 playwright，
+# 首次使用如缺少浏览器，运行 npx playwright install chromium
 npm run test:admin
 npm run test:theme
 npm run test:access -- --browser

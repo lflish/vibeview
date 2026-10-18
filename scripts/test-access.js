@@ -123,12 +123,20 @@ async function scenario(proxy) {
   assert.equal((await patch({ mode: 'code', expiresAt: 'invalid' })).status, 400);
   response = await patch({ mode: 'code', expiresAt: null, reset: true }); assert.equal(response.status, 200); const reset = await response.json();
   assert.notEqual(reset.accessCode, item.accessCode);
+  // Admins can read the current code back; it is sealed at rest and never listed.
+  const reveal = (id = item.id, headers = { cookie: admin }) => request(base + '/admin/api/item/' + id + '/access-code', { headers });
+  assert.equal((await reveal(item.id, {})).status, 401);
+  assert.equal((await reveal(item.id, { Authorization: 'Bearer owner-token' })).status, 401);
+  response = await reveal(); assert.equal(response.status, 200); assert.match(response.headers.get('cache-control'), /no-store/);
+  assert.equal((await response.json()).accessCode, reset.accessCode);
+  assert.ok(!fs.readFileSync(metaPath, 'utf8').includes(reset.accessCode));
   assert.equal((await request(url, { headers: { cookie: grant } })).status, 401);
   assert.equal((await unlock(item.accessCode)).status, 403);
   response = await unlock(reset.accessCode); assert.equal(response.status, 303); const newGrant = response.headers.get('set-cookie').split(';')[0];
   // Change validity without changing the code, and revoke existing grants.
   response = await patch({ mode: 'code', expiresAt: new Date(Date.now() + 60000).toISOString() });
   assert.equal((await response.json()).accessCode, undefined);
+  assert.equal((await (await reveal()).json()).accessCode, reset.accessCode, 'validity change keeps a readable code');
   assert.equal((await request(url, { headers: { cookie: newGrant } })).status, 401);
   response = await unlock(reset.accessCode); assert.equal(response.status, 303); const expiringGrant = response.headers.get('set-cookie').split(';')[0];
   // Simulate the passage of time without resetting the access version.
@@ -141,10 +149,17 @@ async function scenario(proxy) {
   assert.ok(!JSON.stringify(list).includes(reset.accessCode)); assert.ok(!JSON.stringify(list).includes(expiredMeta.access.hash));
   assert.equal((await patch({ mode: 'public' })).status, 200);
   assert.equal((await request(url)).status, 200); assert.equal((await request(url + '/raw')).status, 200);
+  assert.equal((await reveal(legacy)).status, 409, 'legacy resources have no readable code');
   response = await patch({ mode: 'code', expiresAt: null }, legacy); assert.equal(response.status, 200); const legacyCode = (await response.json()).accessCode;
+  assert.equal((await (await reveal(legacy)).json()).accessCode, legacyCode);
+  const legacyPath = path.join(data, 'meta', legacy + '.json'); const sealedMeta = JSON.parse(fs.readFileSync(legacyPath, 'utf8'));
+  fs.writeFileSync(legacyPath, JSON.stringify({ ...sealedMeta, access: { ...sealedMeta.access, salt: 'f'.repeat(32) } }));
+  assert.equal((await reveal(legacy)).status, 409, 'sealed code is bound to its salt');
+  fs.writeFileSync(legacyPath, JSON.stringify(sealedMeta));
   assert.equal((await unlock(legacyCode, base + '/v/' + legacy)).status, 303);
   const publicItem = await upload('text/html', 'public.html', 'PUBLIC', { access_mode: 'public' });
   assert.equal(publicItem.accessCode, undefined); assert.equal((await request(base + '/v/' + publicItem.id)).status, 200);
+  assert.equal((await reveal(publicItem.id)).status, 409);
   const badForm = new FormData(); badForm.append('file', new Blob(['bad']), 'bad.html'); badForm.append('access_days', 'NaN');
   assert.equal((await request(base + '/upload', { method: 'POST', headers: { Authorization: 'Bearer owner-token' }, body: badForm })).status, 400);
   const rateItem = await upload();
@@ -157,7 +172,7 @@ async function scenario(proxy) {
   const skill = await execFile('bash', ['skill/dview-upload/upload.sh', cliFile, '--json'], { cwd: root, env: { ...process.env, DVIEW_URL: base, DVIEW_TOKEN: 'owner-token' } });
   const skillResult = JSON.parse(skill.stdout); assert.ok(skillResult.url); assert.ok(skillResult.accessCode); assert.ok(skillResult.access.expiresAt);
   if (!proxy && process.argv.includes('--browser')) await browserChecks(base, browserBase, admin);
-  console.log(`access integration (${proxy ? 'sidecar proxy' : 'local'}): defaults, hash privacy, raw/HEAD/Range, grants, reset, expiry, ownership, legacy, public, rate limit, CLI passed`);
+  console.log(`access integration (${proxy ? 'sidecar proxy' : 'local'}): defaults, hash privacy, raw/HEAD/Range, grants, reset, expiry, ownership, legacy, public, admin code read-back, rate limit, CLI passed`);
 }
 async function browserChecks(base, browserBase, admin) {
   const { chromium } = require('playwright'); const browser = await chromium.launch({ headless: true });
@@ -170,10 +185,12 @@ async function browserChecks(base, browserBase, admin) {
     assert.equal(fixtureResponse.status, 200);
     const fixture = await fixtureResponse.json();
     const page = await context.newPage(); const errors = []; page.on('pageerror', e => errors.push(e.message));
-    await page.goto(browserBase + '/admin'); await page.waitForSelector('.btn-access');
-    const row = page.locator('#rows tr').filter({ has: page.locator('.id', { hasText: fixture.id }) });
-    await row.locator('.btn-access').click(); await page.locator('#access-reset').click();
-    await page.waitForFunction(() => document.querySelector('#access-code').value.length === 12);
+    await page.goto(browserBase + '/admin'); await page.waitForSelector('#rows tr');
+    const row = page.locator(`#rows tr[data-id="${fixture.id}"]`);
+    await row.locator('.access-badge').click(); await page.locator('#access-reset').click();
+    // The dialog first shows the current code; wait for the reset one.
+    await page.waitForFunction(() => document.querySelector('#access-code-label').textContent.startsWith('新访问码')
+      && document.querySelector('#access-code').value.length === 12);
     const code = await page.locator('#access-code').inputValue();
     const id = fixture.id;
     const visitor = await browser.newContext({ ignoreHTTPSErrors: true }); const preview = await visitor.newPage();

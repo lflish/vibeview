@@ -37,7 +37,9 @@ Sharing and organizing a file should be as easy as generating it. Upload with `d
 | :--- | :--- |
 | One upload workflow for HTML, images, and video. Built for AI reports, visualizations, page prototypes, and short demos. | Random access codes by default, with adjustable expiration, reset, no expiration, or explicit public access. Original files are protected too. |
 | **Find it as your library grows** | **Use your existing tools** |
-| Descriptions, sources, creation dates, and age at a glance. Search, filter, sort, paginate, and delete in bulk. | Upload through the CLI, curl, AI Skills, or CI. Admin pages support light, dark, and system themes, starting with light. |
+| Descriptions, sources, creation dates, and age at a glance. Organize pages by category, project, agent, and tag; search, filter, sort, paginate, and delete in bulk. | Upload through the CLI, curl, AI Skills, or CI. Admin pages support light, dark, and system themes, starting with light. |
+| **Know who is looking** | **Organize by project** |
+| Opens and last-opened time for every link, successful and failed access-code checks, and visits to expired links show which shares are used and which can be cleaned up. Only daily counts are stored; no IPs. | Uploads record the git repository name as their project. Switch projects like folders in resource management, and view uploads and opens per project in statistics. |
 
 **Defaults:** **50 MB** per file · **7-day** access codes · **Indefinite** file retention · **Optional** account quotas.
 
@@ -59,11 +61,24 @@ bash bin/dview upload examples/preview-demo.html --json
 
 ### Admin interface
 
-The admin interface includes resource management and [upload statistics](docs/user-guide.en.md#admin-statistics): today’s uploads, daily trends, a calendar, and source breakdowns. Deleting a file reduces current inventory while preserving upload history. Historical backfill covers surviving files only.
+The admin interface includes resource management and [admin statistics](docs/user-guide.en.md#admin-statistics):
 
-![vibeview light admin UI with descriptions, access status, sources, and creation dates](docs/assets/admin-light.png)
+- **Resource management**: a project bar, an opens column, and filters for never opened / not opened in 30 days / opened in the last 7 days. Sort by opens and clean up in bulk.
+- **Upload statistics**: today's uploads, daily trends, a calendar, and breakdowns by project, source, and type. Deleting a file reduces current inventory while preserving upload history. Historical backfill covers surviving files only.
+- **[Access statistics](docs/user-guide.en.md#access-statistics)**: daily opens, an access-code funnel, the most opened resources, and access-code status. Administrator previews and link-preview crawlers are counted separately from opens.
+
+![vibeview light admin UI with a project bar, resources organized by category, project, agent, and tag, plus access codes, opens, sources, and upload times](docs/assets/admin-light.png)
 
 <p align="center"><sub>Actual admin UI, captured with isolated sample data. The interface is currently in Chinese.</sub></p>
+
+<details>
+<summary><strong>Access statistics</strong> — Daily opens, access-code checks, most opened resources, and code status</summary>
+
+![The access section of the statistics page: opens, unlock success rate, never opened, expired-link visits, daily opens, access-code funnel, most opened resources, and access-code status](docs/assets/statistics-visits.png)
+
+<p align="center"><sub>The access section of the statistics page, captured with isolated sample data.</sub></p>
+
+</details>
 
 <details>
 <summary><strong>Access protection settings</strong> — Set expiration, reset a code, or allow public access</summary>
@@ -72,7 +87,7 @@ The admin interface includes resource management and [upload statistics](docs/us
   <img src="docs/assets/access-settings.png" alt="Access settings: verification mode, expiration, and code reset" width="460">
 </p>
 
-Code expiration blocks access while keeping the file. A new code is shown only when generated; reset it if lost.
+Code expiration blocks access while keeping the file. Admins can view a code at any time and copy the link, code, and expiration in one click; codes created before this feature cannot be viewed until reset once.
 
 </details>
 
@@ -131,7 +146,10 @@ Run `npm link` to use `dview` directly:
 ```bash
 dview upload ./report.html --json --access-days 1 # Code valid for 1 day
 dview upload ./public.html --public               # Explicitly public
+dview upload ./snake.html --json --category game --tag h5   # Record category and tags
 dview list                                       # Your resources
+dview list --category report                     # Filter by category / project / tag
+dview edit Ab3xK9mP2qR7sT1v --category doc         # Reclassify after upload
 dview me                                         # Your usage
 dview delete Ab3xK9mP2qR7sT1v                      # Delete your resource
 ```

@@ -70,7 +70,7 @@ Example response; use the code and expiration returned by your actual upload:
 }
 ```
 
-Open `url` and enter `accessCode` to view the preview. **Save the code and expiration; preferably share the code separately from the URL.** The server stores only the code's hash. A forgotten code must be reset; it cannot be retrieved.
+Open `url` and enter `accessCode` to view the preview. **Save the code and expiration; preferably share the code separately from the URL.** The server verifies codes by hash and keeps an encrypted copy so administrators can view them in the admin UI; the upload-token API returns a code only when it is generated.
 
 ## Upload and share
 
@@ -98,7 +98,29 @@ curl -fsS -X POST "${DVIEW_URL%/}/upload" \
   --form-string "description=Quarterly report and key metrics"
 ```
 
-Optional form fields: `access_days=7` sets the code's validity in days; `access_mode=public` explicitly allows public access. Omitted fields use the server defaults.
+Optional form fields: `access_days=7` sets the code's validity in days; `access_mode=public` explicitly allows public access. Omitted fields use the server defaults. Classification fields are covered in the next section.
+
+### Categories, projects, and tags
+
+Each resource can record what kind of page it is, which project it belongs to, and which agent produced it, so large collections stay easy to filter:
+
+| Field | Meaning |
+| --- | --- |
+| `category` | Page purpose from a fixed list: `doc`, `report`, `dashboard`, `prototype`, `game`, `slides`, `tool`, `demo`, `screenshot`, `other`. Unknown values become `other`; omitted means uncategorized |
+| `project` | Owning project; the CLI defaults to the directory name of the git repository containing the file or the current directory |
+| `agent` / `model` | The agent and model that produced the file; the CLI detects the agent from `AI_AGENT`, `CLAUDECODE`, and similar variables |
+| `tags` | Free tags, comma-separated or repeated, up to 8 |
+
+```bash
+dview upload ./snake.html --json --category game --tag h5,canvas --model claude-opus-5-5
+dview list --category report --project vibeview   # filter by category / project / --tag
+dview edit Ab3xK9mP2qR7sT1v --category doc --tag onboarding
+dview edit Ab3xK9mP2qR7sT1v --tag ''               # clear tags
+```
+
+`DVIEW_AGENT`, `DVIEW_MODEL`, and `DVIEW_PROJECT` set defaults; `--no-detect` disables detection. curl uploads use form fields with the same names. HTML pages may also declare `<meta name="dview:category" content="game">`, `dview:tags`, and so on as a fallback for fields not sent. Values are normalized to lowercase, hyphenated form.
+
+These fields are self-reported by the uploader. They organize and filter resources and never grant access; the trusted upload identity remains the source (the token's account). Edit them later in the admin UI or with `dview edit`.
 
 ### AI Skills and integrations
 
@@ -111,10 +133,13 @@ Optional form fields: `access_days=7` sets the code's validity in days; `access_
 
 At `/admin`, you can:
 
-- View filenames, descriptions, sources, sizes, creation dates, resource ages, and access status.
-- Search filenames, descriptions, sources, or IDs; filter by type / source, sort, and paginate.
-- Copy preview URLs, delete individual resources, or bulk-delete selected resources on the current page.
-- Generate or reset codes under access protection, change expiration, choose no expiration, or allow public access.
+- View filenames, descriptions, sources, sizes, creation dates, and resource ages; the Access column shows protection status and remaining validity.
+- See each row's category, project, agent / model, and tags; click one to show only matching resources, or click **未分类** to classify an item.
+- Select several rows to set category and project, append tags, or delete from the bottom action bar.
+- On narrow screens, resources show as cards and filters fold behind a **筛选** button.
+- Search filenames, descriptions, projects, tags, or IDs; filter by type / source / category / project / agent / tag (each option shows its count), sort, and paginate.
+- Use **复制分享** to copy the page description (or filename), URL, access code, and expiration as ready-to-send text; the **⋯** menu copies the URL only, opens access settings, edits classification, or deletes.
+- View or copy codes in the Access column; generate or reset codes in access settings, change expiration, choose no expiration, or allow public access. Codes created before this feature cannot be viewed until reset.
 - Inspect account usage and quotas, disable / enable accounts, and switch the admin theme.
 
 Upload accounts are maintained in `config.yaml` under `tokens`. The admin UI does not currently create accounts or rotate upload tokens. Restart the main service after changing configuration.
@@ -144,6 +169,18 @@ Open `/admin/statistics` using the statistics link in resource management. The p
 - **Historical coverage**: first startup backfills existing files using their creation times. Previously deleted files cannot be reconstructed. The page shows the capture start time, incomplete-history notice, and skipped invalid metadata count. Empty days show zero; future dates cannot be selected.
 - **Deletion events** distinguish administrator deletion, upload-account deletion, and retention cleanup. Deleted filenames are hidden in statistics. Event logs never store original filenames, descriptions, file content, passwords, upload tokens, or access codes.
 - **Access**: statistics pages and APIs require an authenticated administrator session. Upload tokens do not grant access. Light, dark, and system themes share the existing admin preference.
+- **Projects**: projects are self-reported by uploaders (defaulting to the git repository name). Statistics can be filtered by project and list uploads, current files, and opens per project. Retained resources use their current project; deleted ones keep the project they had at upload. The project bar in resource management switches between projects like folders.
+
+### Access statistics
+
+The "访问情况" (access) section of the statistics page and the "打开" (opens) column in resource management show how preview links are used:
+
+- **Opens**: each visitor load of a preview page (`GET /v/:id`) counts once. Raw file requests (`/raw`) do not count. Previews by a signed-in administrator and link-preview crawlers or script clients (such as Slackbot or curl) are counted separately and excluded from opens.
+- **Access-code checks**: challenge pages shown, successful and failed unlocks, rate-limited attempts, and visits to expired links are counted separately, showing whether codes were shared, whether someone is guessing, and which links need renewing.
+- **Never opened**: resource management filters by "never opened / not opened in 30 days / opened in the last 7 days" and sorts by opens or most recent open, which helps with cleanup.
+- **Access-code status**: counts of active, expiring within 3 days, expired, unconfigured, and public resources, independent of the date range.
+- **Privacy**: only per-resource daily counts and first/last open times are stored; no IPs, user agents, or individual visits. Counts accumulate in memory and are written to `visits.sqlite` under `statistics.directory` every 30 seconds and on graceful shutdown; killing the process may lose up to 30 seconds of counts. Daily rows are kept for 400 days.
+- Access statistics start when the new version first runs; earlier visits cannot be recovered. Resources uploaded before then and not opened since show "暂无记录" (no record) rather than "never opened". They require Node.js built-in SQLite; when it is unavailable the page says so and upload statistics are unaffected.
 
 ```yaml
 statistics:
@@ -160,6 +197,7 @@ Back up the statistics journal together with resource metadata. It is persistent
 - `GET /admin/api/statistics?range=30&month=2026-10&source=&type=`: `range` is `7`, `30`, or `month`. Explicit `from` / `to` dates (`YYYY-MM-DD`, inclusive, at most 366 days) take precedence. `month` selects the calendar month and defaults to the current month; future dates are rejected. `source` is an upload source and `type` is `html`, `image`, or `video`.
 - The response contains `timezone`, `asOf`, `today`, `filters`, `coverage`, `summary`, `daily`, `calendar`, `types`, `sources`, `availableSources`, `activities`, and `deletionActivities`. `coverage.startedAt` marks the capture start; `completeFromDate` is the following local date. `periodComplete` means the range is in the complete capture period and contains no backfilled uploads.
 - `GET /admin/api/statistics/day?date=2026-10-12&page=1&pageSize=20`: accepts the same source/type filters, with `pageSize` capped at 100. Returns `count`, `bytes`, `retainedCount`, `items`, and pagination. Deleted items have `retained: false` and `filename: null`.
+- `GET /admin/api/statistics/visits?from=2026-09-19&to=2026-10-18&project=&source=&type=`: access statistics. `project=-` selects resources without a project (the upload statistics API accepts `project` too). Returns `totals` (`views`, `admin_views`, `bots`, `challenges`, `unlock_ok`, `unlock_fail`, `rate_limited`, `expired_hits`), `daily`, `top`, `projects`, `neverViewed`, `viewedInRange`, `current`, `accessStatus`, and `startedAt`.
 
 Both endpoints require an administrator session and return `Cache-Control: no-store`. Unauthenticated requests, including upload-token-only requests, receive 401; invalid dates, filters, or pagination receive 400.
 
@@ -192,6 +230,7 @@ See [config.example.yaml](../config.example.yaml) for the full configuration. Co
 | `access.default_days` / `grant_minutes` | `7` days / `30` minutes of preview authorization |
 | `access.max_attempts` / `retry_window_minutes` | `10` attempts / `10` minutes |
 | `access.attempts_file` | `./data/preview-attempts.json`, persistent failed-attempt counters |
+| `access.code_secret` | Defaults to `admin.session_secret`; key for the encrypted code copies. After changing it, existing codes still verify but must be reset to become viewable. `DVIEW_ACCESS_CODE_SECRET` also works |
 | `preview.proxy_to_render` / `render_url` | `false` / `http://127.0.0.1:3001` |
 
 Configuration is read from `config.yaml` in the repository root. Set `DVIEW_CONFIG_PATH` (or `CONFIG_PATH`) to use another file. Relative storage paths are resolved against the **configuration file's directory**. When automatic deletion is enabled, cleanup runs at startup and every 6 hours afterward. Changing retention cannot restore deleted files.
@@ -243,33 +282,42 @@ For `NET::ERR_CERT_DATE_INVALID`, check the validity of the certificate actually
 | `GET /api/me/items` | Bearer upload token | List this account's resources |
 | `DELETE /api/me/items/:id` | Bearer upload token | Delete this account's resource |
 | `PATCH /api/me/items/:id/access` | Bearer upload token | Change protection for this account's resource |
+| `PATCH /api/me/items/:id/meta` | Bearer upload token | Change category, project, agent, model, tags, or description of this account's resource |
 | `GET /v/:id` | Public, or a verified preview cookie | Show the preview; show the code form when unauthorized |
 | `POST /v/:id/unlock` | Form field `code` | Verify a code and set a preview cookie |
 | `GET /v/:id/raw` | Same as the preview | Retrieve the original file; supports Range requests |
 | `GET /admin/api/statistics` | Admin session | Summary, trends, calendar, breakdowns, and activity |
 | `GET /admin/api/statistics/day` | Admin session | Paginated upload events for one day |
+| `GET /admin/api/statistics/visits` | Admin session | Opens, access-code checks, top resources, per-project breakdown, and access-code status |
 | `GET /admin/api/list` | Administrator session | Pagination, search, filtering, sorting |
 | `PATCH /admin/api/item/:id/access` | Administrator session | Generate / reset / change access protection |
+| `GET /admin/api/item/:id/access-code` | Administrator session | Read the current code; `409` when public or not readable |
+| `PATCH /admin/api/item/:id/meta` | Administrator session | Change category, project, agent, model, tags, or description |
+| `PATCH /admin/api/items/meta` | Administrator session | Bulk relabel with `{"ids":[...],"category":"report","project":"x","addTags":"q3"}`, up to 100 items; omitted fields stay unchanged and tags are appended |
 | `DELETE /admin/api/item/:id` | Administrator session | Delete a resource |
 | `DELETE /admin/api/items` | Administrator session | Bulk deletion; JSON `{"ids":["id1","id2"]}`, up to 100 items |
 | `GET /admin/api/accounts` | Administrator session | Accounts and usage |
 | `POST /admin/api/accounts/:name/disable` or `/enable` | Administrator session | Disable or enable an account |
 | `GET /healthz` | None | Shallow health check for the main service or sidecar |
 
-Access-protection PATCH bodies use `mode: "code"` or `"public"`, `expiresAt` (an ISO timestamp, or `null` for no expiration), and `reset: true` to generate a new code. New codes are returned only when generated; listings expose neither codes nor hashes.
+Access-protection PATCH bodies use `mode: "code"` or `"public"`, `expiresAt` (an ISO timestamp, or `null` for no expiration), and `reset: true` to generate a new code. Listings expose neither codes nor hashes; administrators read a code on demand through the `access-code` endpoint, served with `no-store`.
 
-The admin list accepts `page`, `pageSize` (maximum 100), `q`, `type`, `source`, `sort=time|name|size|type|source`, and `order=asc|desc`. Responses contain `items`, `total`, `page`, `pageSize`, `totalPages`, and `sources`.
+The admin list accepts `page`, `pageSize` (maximum 100), `q`, `type`, `source`, `category` (`none` for uncategorized), `project`, `agent`, `tag`, `sort=time|name|size|type|source|category|project|agent`, and `order=asc|desc`. Responses contain `items`, `total`, `page`, `pageSize`, `totalPages`, `sources`, `categories` (allowed values), and `facets` (values and counts per classification field). `GET /api/me/items` also accepts `q`, `type`, `category`, `project`, `agent`, and `tag`.
+
+A classification PATCH body may contain any of `category`, `project`, `agent`, `model`, `tags` (array or comma-separated string), and `description`; only fields present change. An empty string clears a field; a cleared `description` falls back to the page title.
 
 ## Development and tests
 
 ```bash
-npm test                          # Retention, descriptions, index, upload/admin smoke
-npm run test:statistics            # Statistics, durable recovery, and APIs
+npm test                          # Retention, descriptions, classification, index, upload/admin smoke
+npm run test:statistics            # Statistics, durable recovery, and APIs (including access statistics)
+npm run test:visits                # Access counting rules, filters and sorting, flush on shutdown
 npm run test:admin-login           # Admin brute-force protection and proxy IP handling
 npm run test:access                # Access protection, retry limits, sidecar bypass prevention
 npm run smoke:render               # Render tests; adds a real container check when Docker is available
 
-# These require Playwright and Chromium in the environment
+# These require Playwright and Chromium: npm install adds the pinned playwright devDependency;
+# if the browser is missing, run npx playwright install chromium
 npm run test:admin
 npm run test:theme
 npm run test:access -- --browser

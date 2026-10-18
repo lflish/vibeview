@@ -1,7 +1,7 @@
 {
   "name": "dview",
   "version": "1.0.0",
-  "description": "\u901a\u7528\u9884\u89c8\u670d\u52a1\uff1a\u4e0a\u4f20 HTML/\u56fe\u7247/\u89c6\u9891\uff0c\u6e32\u67d3\u5e76\u8fd4\u56de\u968f\u673a\u9884\u89c8\u94fe\u63a5",
+  "description": "通用预览服务：上传 HTML/图片/视频，渲染并返回随机预览链接",
   "type": "commonjs",
   "main": "server.js",
   "scripts": {
@@ -12,9 +12,10 @@
     "render": "node render-server.js",
     "smoke:render": "bash scripts/smoke-render.sh",
     "test:admin": "node scripts/test-admin-ui.js",
-    "test": "node scripts/test-retention.js && node scripts/test-metadata.js && node scripts/test-resource-index.js && node scripts/test-admin-login.js && npm run test:statistics && bash scripts/smoke.sh",
+    "test": "node scripts/test-retention.js && node scripts/test-metadata.js && node scripts/test-classification.js && node scripts/test-resource-index.js && node scripts/test-admin-login.js && npm run test:statistics && bash scripts/smoke.sh",
     "smoke": "bash scripts/smoke.sh",
-    "test:statistics": "node scripts/test-statistics.js && node scripts/test-statistics-integration.js"
+    "test:statistics": "node scripts/test-statistics.js && node scripts/test-statistics-integration.js && node scripts/test-visits.js",
+    "test:visits": "node scripts/test-visits.js"
   },
   "dependencies": {
     "express": "^4.22.3",
@@ -48,5 +49,8 @@
     "html",
     "upload",
     "cli"
-  ]
+  ],
+  "devDependencies": {
+    "playwright": "1.64.1"
+  }
 }

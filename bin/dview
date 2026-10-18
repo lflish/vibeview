@@ -2,8 +2,9 @@
 # vibeview CLI — upload / list / delete own previews
 #
 # Usage:
-#   dview upload <file> [--url URL] [--token TOKEN]
-#   dview list [--url URL] [--token TOKEN]
+#   dview upload <file> [--category C] [--tag T] [--url URL] [--token TOKEN]
+#   dview list [--category C] [--project P] [--tag T] [--url URL] [--token TOKEN]
+#   dview edit <id> [--category C] [--tag T] [--project P] [--agent A] [--model M] [--description D]
 #   dview delete <id> [--url URL] [--token TOKEN]
 #   dview me [--url URL] [--token TOKEN]
 # Env: DVIEW_URL, DVIEW_TOKEN (flags override env)
@@ -17,7 +18,8 @@ vibeview CLI — 上传并管理本账户预览资源
 用法:
   dview upload <file>     上传文件，stdout 打印预览 URL
                          默认生成访问码（stderr 显示），有效期 7 天
-  dview list              列出本账户资源
+  dview list              列出本账户资源（可用分类选项筛选）
+  dview edit <id>         修改本账户资源的分类、标签、项目、agent 或描述
   dview delete <id>       删除本账户下的一条资源
   dview me                查看本账户信息与用量
   dview help              显示帮助
@@ -30,14 +32,28 @@ vibeview CLI — 上传并管理本账户预览资源
   --access-days DAYS      新访问码有效天数（默认服务端配置）
   -h, --help              显示帮助
 
+分类选项（upload / edit 写入，list 用于筛选）:
+  --category CAT          页面用途：doc report dashboard prototype game
+                          slides tool demo screenshot other
+  --tag TAG               自由标签，可重复或逗号分隔（最多 8 个）
+  --project NAME          所属项目（upload 默认取 git 仓库目录名）
+  --agent NAME            生成该文件的 agent（upload 默认自动识别）
+  --model NAME            生成该文件的模型，如 claude-opus-5-5
+  --description TEXT      描述（默认取 HTML 标题）
+  --no-detect             upload 时不自动识别 agent / project
+
 环境变量:
   DVIEW_URL               如 https://view.example.com
   DVIEW_TOKEN             config.yaml 中某个账户的 token
+  DVIEW_AGENT / DVIEW_MODEL / DVIEW_PROJECT
+                          upload 时 agent / model / project 的默认值
 
 示例:
   export DVIEW_URL=https://view.example.com DVIEW_TOKEN=xxx
   dview upload ./chart.html
-  dview list
+  dview upload ./snake.html --category game --tag h5,demo
+  dview list --category report
+  dview edit Ab3xK9mP2qR7sT1v --category doc --tag onboarding
   dview delete Ab3xK9mP2qR7sT1v
 USAGE
 }
@@ -85,7 +101,7 @@ items = data if isinstance(data, list) else (data.get("items") or data.get("data
 if not items:
     print("(empty)")
     raise SystemExit(0)
-print("%-20s %-8s %10s  %-19s %s" % ("ID", "TYPE", "SIZE", "CREATED", "NAME"))
+print("%-17s %-6s %-11s %-16s %10s %6s  %-19s %s" % ("ID", "TYPE", "CATEGORY", "PROJECT", "SIZE", "VIEWS", "CREATED", "NAME"))
 for it in items:
     iid = str(it.get("id") or "")
     typ = str(it.get("type") or "")
@@ -96,7 +112,11 @@ for it in items:
         size_s = str(size or "-")
     created = str(it.get("createdAt") or it.get("created_at") or "")[:19]
     name = str(it.get("filename") or it.get("name") or "")
-    print("%-20s %-8s %10s  %-19s %s" % (iid, typ, size_s, created, name))
+    category = str(it.get("category") or "-")
+    project = str(it.get("project") or "-")[:16]
+    visits = it.get("visits") if isinstance(it.get("visits"), dict) else None
+    views = str(visits.get("views", 0)) if visits else "-"
+    print("%-17s %-6s %-11s %-16s %10s %6s  %-19s %s" % (iid, typ, category, project, size_s, views, created, name))
 '
 }
 
@@ -107,6 +127,12 @@ ARGS=()
 UPLOAD_JSON=0
 UPLOAD_PUBLIC=0
 ACCESS_DAYS=""
+DETECT=1
+TAGS=""
+TAGS_SET=0
+# 分类字段：L_<name> 为值，S_<name>=1 表示命令行显式给出（bash 3.2 无关联数组）
+L_category="" L_agent="" L_model="" L_project="" L_description=""
+S_category=0 S_agent=0 S_model=0 S_project=0 S_description=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -137,7 +163,23 @@ while [ "$#" -gt 0 ]; do
       ACCESS_DAYS="$2"
       shift 2
       ;;
-    upload|list|delete|me|whoami)
+    --category|--project|--agent|--model|--description)
+      [ "$#" -ge 2 ] || { err "$1 需要参数"; exit 1; }
+      printf -v "L_${1#--}" '%s' "$2"
+      printf -v "S_${1#--}" '%s' 1
+      shift 2
+      ;;
+    --tag|--tags)
+      [ "$#" -ge 2 ] || { err "$1 需要参数"; exit 1; }
+      TAGS_SET=1
+      if [ -n "$2" ]; then TAGS="${TAGS:+$TAGS,}$2"; fi
+      shift 2
+      ;;
+    --no-detect)
+      DETECT=0
+      shift
+      ;;
+    upload|list|edit|delete|me|whoami)
       if [ -n "$CMD" ]; then
         ARGS+=("$1")
         shift
@@ -194,6 +236,29 @@ http() {
   HTTP_CODE="$code"
 }
 
+# 自动识别 agent：DVIEW_AGENT > AI_AGENT（如 claude-code_2-1-0_agent）> 各工具自带的环境变量。
+detect_agent() {
+  if [ -n "${DVIEW_AGENT:-}" ]; then printf '%s' "$DVIEW_AGENT"; return; fi
+  if [ -n "${AI_AGENT:-}" ]; then printf '%s' "${AI_AGENT%%_*}"; return; fi
+  if [ -n "${CLAUDECODE:-}" ]; then printf 'claude-code'; return; fi
+  if [ -n "${CODEX_SANDBOX:-}${CODEX_SANDBOX_NETWORK_DISABLED:-}" ]; then printf 'codex'; return; fi
+  if [ -n "${GEMINI_CLI:-}" ]; then printf 'gemini-cli'; return; fi
+  if [ "${CI:-}" = "true" ]; then printf 'ci'; return; fi
+}
+
+# 自动识别 project：DVIEW_PROJECT > 文件所在 git 仓库 > 当前目录所在 git 仓库。
+detect_project() {
+  if [ -n "${DVIEW_PROJECT:-}" ]; then printf '%s' "$DVIEW_PROJECT"; return; fi
+  command -v git >/dev/null 2>&1 || return 0
+  local top
+  top="$(git -C "$(dirname "$1")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$top" ]; then basename "$top"; fi
+}
+
+label() {
+  eval "printf '%s' \"\${L_$1}\""
+}
+
 cmd_upload() {
   require_auth
   if [ "${#ARGS[@]}" -ne 1 ]; then
@@ -208,6 +273,17 @@ cmd_upload() {
   local fields=(-F "file=@${file}")
   if [ "$UPLOAD_PUBLIC" = "1" ]; then fields+=(--form-string 'access_mode=public'); fi
   if [ -n "$ACCESS_DAYS" ]; then fields+=(--form-string "access_days=$ACCESS_DAYS"); fi
+  if [ "$DETECT" = "1" ]; then
+    [ -n "$L_agent" ] || L_agent="$(detect_agent)"
+    [ -n "$L_project" ] || L_project="$(detect_project "$file")"
+  fi
+  [ -n "$L_model" ] || L_model="${DVIEW_MODEL:-}"
+  local key value
+  for key in description category agent model project; do
+    value="$(label "$key")"
+    if [ -n "$value" ]; then fields+=(--form-string "$key=$value"); fi
+  done
+  if [ -n "$TAGS" ]; then fields+=(--form-string "tags=$TAGS"); fi
   http POST "${BASE}/upload" "${fields[@]}"
   if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
     err "上传失败 (HTTP ${HTTP_CODE}): ${BODY}"
@@ -231,12 +307,71 @@ cmd_upload() {
 
 cmd_list() {
   require_auth
-  http GET "${BASE}/api/me/items"
+  local query=(-G)
+  local key value
+  for key in category agent project; do
+    value="$(label "$key")"
+    if [ -n "$value" ]; then query+=(--data-urlencode "$key=$value"); fi
+  done
+  if [ -n "$TAGS" ]; then query+=(--data-urlencode "tag=${TAGS%%,*}"); fi
+  http GET "${BASE}/api/me/items" "${query[@]}"
   if [ "$HTTP_CODE" != "200" ]; then
     err "列表失败 (HTTP ${HTTP_CODE}): ${BODY}"
     exit 1
   fi
   format_list "$BODY"
+}
+
+# 由 DVIEW_EDIT_* 环境变量拼出 PATCH JSON，避免在 shell 里手工转义。
+edit_payload() {
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c '
+import json, os
+body = {k: os.environ.get("DVIEW_EDIT_" + k, "") for k in os.environ.get("DVIEW_EDIT_KEYS", "").split()}
+if os.environ.get("DVIEW_EDIT_TAGS_SET") == "1":
+    body["tags"] = os.environ.get("DVIEW_EDIT_TAGS", "")
+print(json.dumps(body))
+'
+    return
+  fi
+  command -v node >/dev/null 2>&1 || return 1
+  node -e '
+const e = process.env;
+const body = {};
+for (const k of (e.DVIEW_EDIT_KEYS || "").split(/\s+/).filter(Boolean)) body[k] = e["DVIEW_EDIT_" + k] || "";
+if (e.DVIEW_EDIT_TAGS_SET === "1") body.tags = e.DVIEW_EDIT_TAGS || "";
+console.log(JSON.stringify(body));
+'
+}
+
+# 只发送命令行里给出的字段；--tag '' 表示清空标签，--category '' 表示改回未分类。
+cmd_edit() {
+  require_auth
+  if [ "${#ARGS[@]}" -ne 1 ]; then
+    err "用法: dview edit <id> [--category C] [--tag T] [--project P] [--agent A] [--model M] [--description D]"
+    exit 1
+  fi
+  local id="${ARGS[0]}"
+  local payload keys="" key
+  for key in category agent model project description; do
+    if [ "$(eval "printf '%s' \"\$S_$key\"")" = "1" ]; then keys="$keys $key"; fi
+  done
+  payload="$(DVIEW_EDIT_KEYS="$keys" DVIEW_EDIT_TAGS_SET="$TAGS_SET" DVIEW_EDIT_TAGS="$TAGS" \
+    DVIEW_EDIT_category="$L_category" DVIEW_EDIT_agent="$L_agent" DVIEW_EDIT_model="$L_model" \
+    DVIEW_EDIT_project="$L_project" DVIEW_EDIT_description="$L_description" edit_payload)" || {
+    err "需要 python3 或 node 来生成请求"
+    exit 1
+  }
+  if [ "$payload" = "{}" ]; then
+    err "没有要修改的字段，请指定 --category / --tag / --project / --agent / --model / --description"
+    exit 1
+  fi
+  http PATCH "${BASE}/api/me/items/${id}/meta" -H 'Content-Type: application/json' --data "$payload"
+  if [ "$HTTP_CODE" != "200" ]; then
+    err "修改失败 (HTTP ${HTTP_CODE}): ${BODY}"
+    exit 1
+  fi
+  if [ "$UPLOAD_JSON" = "1" ]; then printf '%s\n' "$BODY"; else printf 'updated %s\n' "$id"; fi
 }
 
 cmd_delete() {
@@ -267,6 +402,7 @@ cmd_me() {
 case "$CMD" in
   upload) cmd_upload ;;
   list) cmd_list ;;
+  edit) cmd_edit ;;
   delete) cmd_delete ;;
   me|whoami) cmd_me ;;
   *)
