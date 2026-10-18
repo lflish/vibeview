@@ -319,6 +319,7 @@ npm run smoke:render               # 渲染测试；Docker 可用时额外验证
 
 # 以下需要 Playwright 和 Chromium：npm install 会安装 devDependencies 中固定版本的 playwright，
 # 首次使用如缺少浏览器，运行 npx playwright install chromium
+npm run test:browser               # 一次运行下面全部浏览器测试（CI 同样执行）
 npm run test:admin
 npm run test:theme
 npm run test:access -- --browser
