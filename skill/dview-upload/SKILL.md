@@ -41,7 +41,8 @@ dview upload <文件路径> --json
 dview upload <文件路径> --json --access-days 7
 # 只有用户明确要求公开时：
 dview upload <文件路径> --public
-dview list
+dview list [--category report] [--project 名称] [--tag 标签]
+dview edit <id> --category doc --tag onboarding
 dview delete <id>
 dview me
 ```
@@ -49,9 +50,9 @@ dview me
 否则用本 Skill 自带脚本：
 
 ```bash
-bash skill/dview-upload/upload.sh <文件路径> --json
+bash skill/dview-upload/upload.sh <文件路径> --json --category report --tag q3
 # 或全局安装后：
-bash ~/.claude/skills/dview-upload/upload.sh <文件路径> --json
+bash ~/.claude/skills/dview-upload/upload.sh <文件路径> --json --category report --tag q3
 ```
 
 AI 上传默认使用 `--json`，从同一次响应读取 `url`、`accessCode`、`access.expiresAt`。不支持查询已生成的旧访问码；不要只解析 URL 后丢弃访问码。旧 CLI 不支持此参数时用本 Skill 的脚本或上传 API 读取完整 JSON。
@@ -64,9 +65,34 @@ https://view.example.com/v/Ab3xK9mP2qR7sT1v
 
 默认上传需要访问码，通常有效期 7 天。CLI 的 stdout 保持预览 URL，stderr 显示新访问码；`--json` 返回 `url`、`accessCode`、`access.expiresAt`。返回预览链接时同时告诉用户访问码和到期时间，建议将链接与访问码分开分享。不要把访问码放进 URL，也不要写进生成的 HTML。
 
-只有用户明确要求免验证码时使用 `--public`。管理端可重置访问码、改变到期时间或设为公开；访问码只在生成时显示，忘记后需要重置。服务端只保留哈希，无法查询旧码。访问码过期不删除文件。
+只有用户明确要求免验证码时使用 `--public`。管理端可查看 / 复制访问码、重置访问码、改变到期时间或设为公开；上传 API 只在生成时返回访问码，请保存 JSON 中的 `accessCode`。访问码过期不删除文件。
 
 受保护预览需要先在验证表单输入访问码，自动验证应使用 `POST /v/<id>/unlock` 并保留服务端 cookie；原文件也需要授权。遇到 429 遵守 `Retry-After` 并停止猜码，不要换 IP 或循环重试。受保护 HTML 使用浏览器 sandbox，脚本访问 localStorage 时应捕获异常并回退到内存中的主题状态。
+
+## 上传时标注分类（每次都要做）
+
+资源多了以后，管理员靠分类、项目和标签筛选与清理。上传时按页面实际用途选择**一个** `--category`：
+
+| 值 | 用于 |
+| --- | --- |
+| `doc` | 开发文档、API / 架构说明、技术方案 |
+| `report` | 报告、周报、分析结论、调研总结 |
+| `dashboard` | 数据看板、图表、可视化 |
+| `prototype` | UI 原型、页面设计稿、交互草图 |
+| `game` | 游戏、互动玩具 |
+| `slides` | 幻灯片、演示文稿 |
+| `tool` | 可反复使用的小工具或小应用（计算器、转换器、表单） |
+| `demo` | 一次性的功能 / 技术演示、示例 |
+| `screenshot` | 截图、录屏 |
+| `other` | 以上都不合适时 |
+
+再用 `--tag` 补充 1–3 个具体标签（小写、短横线，如 `q3`、`onboarding`、`h5`）；如知道本次使用的模型，用 `--model` 传入（如 `claude-opus-5-5`）。`project` 默认取当前 git 仓库目录名，`agent` 默认从环境变量识别，通常无需手填；不在仓库里或识别不对时用 `--project` / `--agent` 指定。
+
+```bash
+dview upload /tmp/q3-report.html --json --category report --tag q3,ops --model claude-opus-5-5
+```
+
+用户只要求上传已有文件时也按内容选择分类；无法判断时用 `other`，不要编造新分类。标错后可用 `dview edit <id> --category <值>` 修改。这些字段只用于整理，不影响访问权限。
 
 ## 上传与管理统计
 
@@ -79,9 +105,9 @@ https://view.example.com/v/Ab3xK9mP2qR7sT1v
 ## 示例
 
 ```bash
-dview upload /tmp/chart.html
-dview upload ./screenshot.png
-bash upload.sh /tmp/chart.html
+dview upload /tmp/chart.html --json --category dashboard --tag sales
+dview upload ./screenshot.png --json --category screenshot
+bash upload.sh /tmp/snake.html --json --category game --tag h5
 ```
 
 ## 注意

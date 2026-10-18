@@ -44,17 +44,26 @@ curl -fsS -X POST "$DVIEW_URL/upload" \
 ```
 
 Parse JSON field `url` and show it to the user.
+
+Classify every upload so the admin can filter thousands of pages later: pass one
+`--category` (`doc`, `report`, `dashboard`, `prototype`, `game`, `slides`, `tool`,
+`demo`, `screenshot`, `other`) plus 1–3 lowercase `--tag` values, and `--model` when
+known. `project` defaults to the git repository name and `agent` is auto-detected; set
+`DVIEW_AGENT` (e.g. `codex`, `cursor`) if detection does not recognize your tool. curl
+uses the same form field names (`category`, `tags`, `project`, `agent`, `model`).
+Fix a wrong label with `dview edit <id> --category <value>`.
 Uploads now require a preview access code by default. Prefer `dview upload <file> --json` to obtain `url`, `accessCode`, and `access.expiresAt`; share the code and expiration with the user separately from the URL. Do not embed the code in URLs or generated HTML. Use `--public` only when the user explicitly requests an unprotected preview. A code expiring does not delete the file.
 
 ## Manage own resources
 
 ```bash
 dview me
-dview list
+dview list [--category C] [--project P] [--tag T]
+dview edit <id> [--category C] [--tag T] [--project P]
 dview delete <id>
 ```
 
-Same APIs: `GET /api/me`, `GET /api/me/items`, `DELETE /api/me/items/:id`.
+Same APIs: `GET /api/me`, `GET /api/me/items`, `PATCH /api/me/items/:id/meta`, `DELETE /api/me/items/:id`.
 
 ## Constraints
 

@@ -43,20 +43,24 @@ printf 'DVIEW_URL=%s\nDVIEW_TOKEN=%s\n' "${DVIEW_URL:-<未设置>}" "${DVIEW_TOK
 
 按顺序探测上传方式(用第一个可用的):
 
-1. PATH 上的 CLI:`dview upload <文件> --json`（返回新访问码和到期时间）
+先按页面用途选一个分类 `CATEGORY`:`doc` 开发文档 / `report` 报告 / `dashboard` 图表看板 / `prototype` 原型 / `game` 游戏 / `slides` 幻灯片 / `tool` 小工具 / `demo` 演示 / `other`。再选 1–3 个小写标签 `TAGS`(逗号分隔)。
+
+1. PATH 上的 CLI:`dview upload <文件> --json --category <分类> --tag <标签>`（返回新访问码和到期时间）
 2. 项目内 CLI:`bash bin/dview upload <文件> --json`
 3. 项目内 Skill 脚本:`bash skill/dview-upload/upload.sh <文件> --json`
 4. 全局 Skill 脚本:`bash $HOME/.claude/skills/dview-upload/upload.sh <文件> --json`
 
 ```bash
 FILE="<刚生成的HTML路径>"
+CATEGORY="<分类>"
+TAGS="<标签1,标签2>"
 if command -v dview >/dev/null 2>&1; then
-  dview upload "$FILE" --json
+  dview upload "$FILE" --json --category "$CATEGORY" --tag "$TAGS"
 elif [ -x bin/dview ]; then
-  bash bin/dview upload "$FILE" --json
+  bash bin/dview upload "$FILE" --json --category "$CATEGORY" --tag "$TAGS"
 else
   UP="skill/dview-upload/upload.sh"; [ -f "$UP" ] || UP="$HOME/.claude/skills/dview-upload/upload.sh"
-  bash "$UP" "$FILE" --json
+  bash "$UP" "$FILE" --json --category "$CATEGORY" --tag "$TAGS"
 fi
 ```
 

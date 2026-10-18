@@ -5,7 +5,8 @@
 ## 数据与备份
 
 - 从服务器实际配置解析 `statistics.directory` 和 `storage.meta_dir`；未配置前者时使用 meta 目录旁的 `statistics/`。默认时区 `Asia/Shanghai`，配置也可能使用其他 IANA 时区。不要输出整份配置或凭据。
-- `resources.sqlite` 是可重建索引；统计目录中的 `state.json`、`uploads/`、`deletions/`、`pending-upload/`、`pending-delete/` 是持久化历史及未完成意图，全部保留。不要清理 pending 文件来绕过恢复错误。
+- `resources.sqlite` 是可重建索引；统计目录中的 `state.json`、`uploads/`、`deletions/`、`pending-upload/`、`pending-delete/` 是持久化历史及未完成意图，`visits.sqlite` 是预览访问计数，全部保留。不要清理 pending 文件来绕过恢复错误。
+- 访问计数先在内存累加，每 30 秒及收到 SIGINT/SIGTERM 时写入 `visits.sqlite`。备份前用 PM2 正常停止主进程（不要 kill -9），否则最多丢失最近 30 秒的计数。
 - 首次发布前记录当前资源数量。已有统计版本发布前记录 `coverage.startedAt` 和历史汇总，作为升级验证依据。
 - 对元数据与统计日志做一致性备份：在实际发布窗口短暂停止本项目 `vibeview` 主进程，确认停止后将这两个目录复制/打包至权限 700 的发布备份目录，保留文件权限。首次发布没有统计目录时记录“尚未初始化”，不要用空目录覆盖线上目录。备份成功后继续同步与重启；备份失败则恢复旧进程并停止发布。只操作本项目，不停止 Sidecar 或其他 PM2 应用。
 - 统计日志不记录文件名、简介、token、访问码或访问哈希。不要在验证日志中输出临时资源的访问码。
@@ -16,7 +17,8 @@
 2. 线上未登录及仅携带上传 Bearer token 请求 `/admin/api/statistics` 和 `/admin/api/statistics/day` 应返回 401 JSON。管理员 session 才能读取；响应 `Cache-Control: no-store`。
 3. 登录读取汇总与按日明细，检查 timezone、日期范围、coverage、summary、daily、calendar。首次上线的回填可能不完整，不能把开始记录前的历史当作完整累计量；不要将回填误算成刚发生的活动。
 4. 用可辨认名称上传一条临时资源，确认对应上传记录；删除该资源后，上传记录仍在、retained 为 false、filename 为 null，并出现删除事件。有并发真实上传时，按临时资源 ID 验证，不能强行断言全站总数只增加 1。
-5. 重启后检查 coverage.startedAt 未被重置，临时资源的上传/删除记录仍在且没有重复。检查 `/admin/statistics` 的真实页面、来源/类型筛选、日历联动、主题和手机布局。
+5. 访问统计：未登录请求 `/admin/api/statistics/visits` 返回 401；用浏览器 UA 打开一条临时公开资源，30 秒内或重启后在资源管理「打开」列和统计页「访问情况」中看到计数。管理员自己登录后的预览和 curl 请求不计入打开次数（分别计入 admin_views、bots）。
+6. 重启后检查 coverage.startedAt 未被重置，临时资源的上传/删除记录仍在且没有重复。检查 `/admin/statistics` 的真实页面、来源/类型筛选、日历联动、主题和手机布局。
 
 临时验证也会计入真实上传历史。验证后只删除测试文件，不能删除事件来“恢复”统计数字。勿对生产管理员进行暴力破解测试；登录限制在隔离测试中验证。
 

@@ -37,7 +37,9 @@
 | :--- | :--- |
 | HTML、图片和视频使用同一套上传流程。适合 AI 生成的报告、可视化图表、页面原型和短视频。 | 新文件默认生成随机访问码，有效期可调整。支持重置、不过期或显式公开，原文件也受保护。 |
 | **文件多了，也找得到** | **接入你已有的工具** |
-| 简介、来源、创建时间和持续时长一目了然；搜索、筛选、排序、分页和批量删除帮助整理。 | CLI、curl、AI Skill 和 CI 都能上传。管理页支持浅色、深色和跟随系统，首次默认浅色。 |
+| 简介、来源、创建时间和持续时长一目了然；页面按分类、项目、agent 和标签整理，搜索、筛选、排序、分页和批量删除帮助管理。 | CLI、curl、AI Skill 和 CI 都能上传。管理页支持浅色、深色和跟随系统，首次默认浅色。 |
+| **知道谁在看** | **按项目归档** |
+| 每个链接的打开次数和最后打开时间、访问码验证成功与失败、过期链接被访问，一眼看出哪些分享有人看、哪些可以清理。只保存每日计数，不记录 IP。 | 上传时自动记录 git 仓库名作为项目。资源管理用项目导航像目录一样切换，统计也能按项目查看上传和打开。 |
 
 **默认值：** 单文件 **50 MB** · 访问码 **7 天** · 文件**永久保留** · 账户配额**可选**。
 
@@ -59,11 +61,24 @@ bash bin/dview upload examples/preview-demo.html --json
 
 ### 管理端
 
-管理端提供资源管理和[上传统计](docs/user-guide.zh-CN.md#管理统计)：今日上传、每日趋势、上传日历和来源分布。删除文件会减少当前存量，历史上传记录继续保留；上线前的数据仅能回填仍存在的文件。
+管理端提供资源管理和[管理统计](docs/user-guide.zh-CN.md#管理统计)：
 
-![vibeview 浅色管理界面：文件简介、访问状态、来源和创建时间](docs/assets/admin-light.png)
+- **资源管理**：项目导航、「打开」列，以及「从未打开 / 30 天未打开 / 7 天内打开过」筛选，按打开次数排序后可直接批量清理。
+- **上传统计**：今日上传、每日趋势、上传日历，按项目、来源和类型分布。删除文件会减少当前存量，历史上传记录继续保留；上线前的数据仅能回填仍存在的文件。
+- **[访问统计](docs/user-guide.zh-CN.md#访问统计)**：每日打开次数、访问码验证漏斗、打开最多的资源和访问码状态。管理员自己的预览和链接预览爬虫单独计数，不计入打开次数。
+
+![vibeview 浅色管理界面：项目导航，资源按分类、项目、agent 与标签整理，显示访问码、打开次数、来源和上传时间](docs/assets/admin-light.png)
 
 <p align="center"><sub>实际管理界面，使用隔离的演示数据截图；截图中的名称与资源仅作示例。</sub></p>
+
+<details>
+<summary><strong>查看访问统计</strong> — 每日打开次数、访问码验证、打开最多与访问码状态</summary>
+
+![统计总览的访问情况：期间打开、验证成功率、从未打开、打开过期链接，每日打开趋势、访问码验证漏斗、打开最多的资源与访问码状态](docs/assets/statistics-visits.png)
+
+<p align="center"><sub>统计总览的「访问情况」板块，使用隔离的演示数据截图。</sub></p>
+
+</details>
 
 <details>
 <summary><strong>查看访问保护设置</strong> — 调整有效期、重置访问码、开放公开访问</summary>
@@ -72,7 +87,7 @@ bash bin/dview upload examples/preview-demo.html --json
   <img src="docs/assets/access-settings.png" alt="访问保护设置：验证方式、有效期与访问码重置" width="460">
 </p>
 
-访问码到期只限制访问，文件继续保留。新访问码仅在生成时显示，忘记后可以重置。
+访问码到期只限制访问，文件继续保留。管理端可随时查看访问码，并一键复制「链接 + 访问码 + 有效期」；升级前生成的访问码无法查看，重置一次即可。
 
 </details>
 
@@ -131,7 +146,10 @@ bash bin/dview upload ./report.html --json
 ```bash
 dview upload ./report.html --json --access-days 1 # 访问码有效期 1 天
 dview upload ./public.html --public               # 显式设为公开
+dview upload ./snake.html --json --category game --tag h5   # 记录页面分类与标签
 dview list                                       # 查看本账户资源
+dview list --category report                     # 按分类 / 项目 / 标签筛选
+dview edit Ab3xK9mP2qR7sT1v --category doc         # 上传后修改分类
 dview me                                         # 查看用量
 dview delete Ab3xK9mP2qR7sT1v                      # 删除本账户资源
 ```

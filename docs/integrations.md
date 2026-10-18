@@ -19,8 +19,10 @@
 # 上传
 curl -fsS -X POST "$DVIEW_URL/upload" \
   -H "Authorization: Bearer $DVIEW_TOKEN" \
-  -F "file=@./report.html"
-# => {"url":"https://.../v/<id>","id":"<id>","source":"..."}
+  -F "file=@./report.html" \
+  --form-string "category=report" --form-string "tags=q3,ops" \
+  --form-string "project=my-repo" --form-string "agent=ci"
+# => {"url":"https://.../v/<id>","id":"<id>","source":"...","category":"report",...}
 
 # 本账户信息 / 列表 / 删除
 curl -fsS -H "Authorization: Bearer $DVIEW_TOKEN" "$DVIEW_URL/api/me"
@@ -41,8 +43,9 @@ npm install -g .          # 或: npm link
 # 或用安装脚本（默认装到 ~/.local/bin）
 bash install-skill.sh --url "$DVIEW_URL" --token "$DVIEW_TOKEN" --cli
 
-dview upload ./chart.html
-dview list
+dview upload ./chart.html --json --category dashboard --tag sales
+dview list --category dashboard
+dview edit <id> --tag sales,q3
 dview me
 dview delete <id>
 
@@ -75,10 +78,12 @@ bash install-skill.sh --url "$DVIEW_URL" --token "$DVIEW_TOKEN"
 ```bash
 export DVIEW_URL=... DVIEW_TOKEN=...
 # 确保 dview 在 PATH，或直接：
-bash /path/to/vibeview/bin/dview upload ./out.html
+DVIEW_AGENT=codex bash /path/to/vibeview/bin/dview upload ./out.html --json --category report
 ```
 
-Cursor 项目内也可放一条 rule：「生成可预览产物后执行 `dview upload <path>`，把 URL 回给用户」。
+`agent` 会尽量从环境变量自动识别（`AI_AGENT`、`CLAUDECODE` 等），识别不到时用 `DVIEW_AGENT` 或 `--agent` 指定；`category` 的取值见 [用户指南](user-guide.zh-CN.md#分类项目与标签)。
+
+Cursor 项目内也可放一条 rule：「生成可预览产物后执行 `dview upload <path> --json --category <分类>`，把 URL 和访问码回给用户」。
 
 ---
 

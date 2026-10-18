@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # vibeview 上传脚本（Skill 内置；完整能力见仓库 bin/dview）
-# 用法: ./upload.sh <文件路径>
+# 用法: ./upload.sh <文件路径> [--json] [--category C] [--tag T] [--project P]
+#                   [--agent A] [--model M] [--description D]
 # 依赖环境变量:
 #   DVIEW_URL    服务地址 (如 https://view.example.com)
 #   DVIEW_TOKEN  上传 token (来自服务端 config.yaml 的 tokens 列表)
@@ -9,12 +10,30 @@
 
 set -euo pipefail
 
-if [ "$#" -lt 1 ] || [ "$#" -gt 2 ] || { [ "$#" -eq 2 ] && [ "$2" != '--json' ]; }; then
-  echo "用法: $0 <文件路径> [--json]" >&2
+usage() {
+  echo "用法: $0 <文件路径> [--json] [--category C] [--tag T] [--project P] [--agent A] [--model M] [--description D]" >&2
   exit 1
-fi
+}
 
+[ "$#" -ge 1 ] || usage
 FILE="$1"
+shift
+JSON=0
+FIELDS=()
+AGENT="${DVIEW_AGENT:-}"
+PROJECT="${DVIEW_PROJECT:-}"
+MODEL="${DVIEW_MODEL:-}"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --json) JSON=1; shift ;;
+    --agent) [ "$#" -ge 2 ] || usage; AGENT="$2"; shift 2 ;;
+    --project) [ "$#" -ge 2 ] || usage; PROJECT="$2"; shift 2 ;;
+    --model) [ "$#" -ge 2 ] || usage; MODEL="$2"; shift 2 ;;
+    --category|--description) [ "$#" -ge 2 ] || usage; FIELDS+=(--form-string "${1#--}=$2"); shift 2 ;;
+    --tag|--tags) [ "$#" -ge 2 ] || usage; FIELDS+=(--form-string "tags=$2"); shift 2 ;;
+    *) usage ;;
+  esac
+done
 if [ ! -f "$FILE" ]; then
   echo "错误: 文件不存在: $FILE" >&2
   exit 1
@@ -25,9 +44,20 @@ fi
 
 BASE="${DVIEW_URL%/}"
 
+# 未显式指定时自动识别 agent 与 project（git 仓库目录名）
+if [ -z "$AGENT" ] && [ -n "${AI_AGENT:-}" ]; then AGENT="${AI_AGENT%%_*}"; fi
+if [ -z "$AGENT" ] && [ -n "${CLAUDECODE:-}" ]; then AGENT="claude-code"; fi
+if [ -z "$PROJECT" ] && command -v git >/dev/null 2>&1; then
+  TOP="$(git -C "$(dirname "$FILE")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$TOP" ]; then PROJECT="$(basename "$TOP")"; fi
+fi
+if [ -n "$AGENT" ]; then FIELDS+=(--form-string "agent=$AGENT"); fi
+if [ -n "$PROJECT" ]; then FIELDS+=(--form-string "project=$PROJECT"); fi
+if [ -n "$MODEL" ]; then FIELDS+=(--form-string "model=$MODEL"); fi
+
 RESP=$(curl -fsS -X POST "${BASE}/upload" \
   -H "Authorization: Bearer ${DVIEW_TOKEN}" \
-  -F "file=@${FILE}")
+  -F "file=@${FILE}" ${FIELDS[@]+"${FIELDS[@]}"})
 
 # 提取返回 JSON 里的 url 字段
 URL=$(printf '%s' "$RESP" | python3 -c "import sys,json;print(json.load(sys.stdin)['url'])" 2>/dev/null || true)
@@ -37,7 +67,7 @@ if [ -z "$URL" ]; then
   exit 1
 fi
 
-if [ "${2:-}" = '--json' ]; then
+if [ "$JSON" = '1' ]; then
   printf '%s\n' "$RESP"
   exit 0
 fi

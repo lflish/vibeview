@@ -50,7 +50,11 @@ jobs:
           fi
           RESP=$(curl -fsS -X POST "${DVIEW_URL%/}/upload" \
             -H "Authorization: Bearer ${DVIEW_TOKEN}" \
-            -F "file=@dist/index.html")
+            -F "file=@dist/index.html" \
+            --form-string "category=prototype" \
+            --form-string "agent=ci" \
+            --form-string "project=${GITHUB_REPOSITORY#*/}" \
+            --form-string "tags=pr-${{ github.event.pull_request.number }}")
           URL=$(printf '%s' "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['url'])")
           ID=$(printf '%s' "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
           echo "url=$URL" >> "$GITHUB_OUTPUT"

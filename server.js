@@ -8,14 +8,38 @@ const config = require('./lib/config');
 const store = require('./lib/store');
 const accounts = require('./lib/accounts');
 const metadata = require('./lib/metadata');
+const classification = require('./lib/classification');
 const resourceIndex = require('./lib/resource-index');
 const statistics = require('./lib/statistics');
+const visits = require('./lib/visit-stats');
+const { isBot } = require('./lib/visits');
 const { startCleanupScheduler } = require('./lib/cleanup');
 const { mountPreviewRoutes } = require('./lib/preview-routes');
 const { createPreviewProxy } = require('./lib/preview-proxy');
 const { createPreviewAccess, constantEqual } = require('./lib/preview-access');
 const { createAdminLoginProtection } = require('./lib/admin-login');
-const previewAccess = createPreviewAccess({ store, options: config.access, secureCookie: config.baseUrl.startsWith('https://') });
+// 预览访问计数：爬虫与带管理员会话 cookie 的打开单独计数，不算作访客。
+// 预览路由挂在 session 中间件之前，这里只看 cookie 是否存在（只有登录成功才会下发）。
+function hasAdminCookie(req) {
+  return /(?:^|;\s*)connect\.sid=/.test(String(req.headers.cookie || ''));
+}
+function recordVisit(kind, meta, req) {
+  const labels = { ...meta, ...classification.normalize(meta) };
+  if (kind === 'view' || kind === 'challenge') {
+    if (isBot(req.get('user-agent'))) return visits.record(labels, 'bots');
+    if (kind === 'view') return visits.record(labels, hasAdminCookie(req) ? 'admin_views' : 'views');
+    return visits.record(labels, 'challenges');
+  }
+  const map = { expired: 'expired_hits', unlock_ok: 'unlock_ok', unlock_fail: 'unlock_fail', rate_limited: 'rate_limited' };
+  if (map[kind]) visits.record(labels, map[kind]);
+}
+const previewAccess = createPreviewAccess({
+  store,
+  options: config.access,
+  codeSecret: config.access.codeSecret || config.admin.sessionSecret,
+  secureCookie: config.baseUrl.startsWith('https://'),
+  onEvent: recordVisit,
+});
 const adminLogin = createAdminLoginProtection(config.admin);
 
 const app = express();
@@ -89,18 +113,80 @@ function mapItem(m) {
     size: m.size,
     source: m.source,
     description,
+    ...classification.normalize(m),
     createdAt: m.createdAt,
     access: previewAccess.info(store.readMeta(m.id) || m),
     url: `${config.baseUrl}/v/${m.id}`,
   };
 }
 
+// 给列表补上打开次数与最后访问时间（批量查询）。
+function withVisits(items) {
+  const totals = visits.totalsFor(items.map((item) => item.id));
+  return items.map((item) => ({ ...item, visits: totals.get(item.id) || { views: 0, firstViewedAt: null, lastViewedAt: null } }));
+}
+
 // 启动时把已有 JSON 元数据迁移/修复到 SQLite 索引；JSON 仍是权威数据源。
 statistics.initialize();
+visits.start();
+resourceIndex.attachVisits(visits.file);
 resourceIndex.rebuild(store.listAll().map((item) => ({
   ...item,
   description: item.description || metadata.descriptionFromFile(store.filePath(item), item.type),
 })));
+
+// 列表筛选参数：分类维度统一做与上传时相同的规范化，保证能精确匹配。
+function listFilters(query = {}) {
+  const text = (value) => String(value || '').trim().slice(0, 120);
+  const category = text(query.category);
+  return {
+    q: text(query.q).toLowerCase(),
+    type: ['html', 'image', 'video'].includes(query.type) ? query.type : '',
+    source: text(query.source),
+    category: category === 'none' ? 'none' : classification.normalizeCategory(category),
+    agent: classification.normalizeLabel(text(query.agent)),
+    project: text(query.project) === '-' ? '-' : classification.normalizeLabel(text(query.project)),
+    tag: classification.normalizeTags(text(query.tag))[0] || '',
+    visit: ['never', 'stale30', 'recent7'].includes(query.visit) ? query.visit : '',
+  };
+}
+
+function matchesFilters(item, f) {
+  if (f.type && item.type !== f.type) return false;
+  if (f.source && item.source !== f.source) return false;
+  if (f.category && item.category !== (f.category === 'none' ? '' : f.category)) return false;
+  if (f.agent && item.agent !== f.agent) return false;
+  if (f.project && item.project !== (f.project === '-' ? '' : f.project)) return false;
+  if (f.visit && item.visits) {
+    const last = item.visits.lastViewedAt || '';
+    if (f.visit === 'never' && item.visits.views) return false;
+    if (f.visit === 'stale30' && last >= new Date(Date.now() - 30 * 86400000).toISOString()) return false;
+    if (f.visit === 'recent7' && last < new Date(Date.now() - 7 * 86400000).toISOString()) return false;
+  }
+  if (f.tag && !item.tags.includes(f.tag)) return false;
+  if (f.q) {
+    const haystack = [item.filename, item.description, item.source, item.id, item.type, item.url,
+      item.category, item.agent, item.model, item.project, ...item.tags]
+      .map((value) => String(value || '').toLowerCase())
+      .join(' ');
+    if (!haystack.includes(f.q)) return false;
+  }
+  return true;
+}
+
+function countFacets(items) {
+  const facets = { category: new Map(), agent: new Map(), project: new Map(), tag: new Map() };
+  const bump = (map, value) => map.set(value, (map.get(value) || 0) + 1);
+  for (const item of items) {
+    bump(facets.category, item.category);
+    bump(facets.agent, item.agent);
+    bump(facets.project, item.project);
+    for (const tag of item.tags) bump(facets.tag, tag);
+  }
+  const list = (map) => [...map].map(([value, count]) => ({ value, count }))
+    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+  return Object.fromEntries(Object.entries(facets).map(([key, map]) => [key, list(map)]));
+}
 
 // 上传失败时清掉已落盘的临时目录
 function cleanupFailedUpload(req) {
@@ -148,6 +234,7 @@ app.post('/upload', requireToken, (req, res) => {
       cleanupFailedUpload(req);
       return res.status(400).json({ error: error.message });
     }
+    const storedPath = store.filePath({ id, type: req.uploadType, filename });
     const meta = {
       access: createdAccess.policy,
       id,
@@ -156,11 +243,8 @@ app.post('/upload', requireToken, (req, res) => {
       mime: req.file.mimetype,
       size: req.file.size,
       source: req.uploadSource,
-      description: metadata.descriptionForUpload(
-        store.filePath({ id, type: req.uploadType, filename }),
-        req.uploadType,
-        req.body && req.body.description
-      ),
+      description: metadata.descriptionForUpload(storedPath, req.uploadType, req.body && req.body.description),
+      ...classification.forUpload(storedPath, req.uploadType, req.body || {}),
       createdAt: new Date().toISOString(),
     };
     try {
@@ -171,7 +255,7 @@ app.post('/upload', requireToken, (req, res) => {
     }
     res.set('Cache-Control', 'no-store');
     res.json({ url: `${config.baseUrl}/v/${id}`, id, source: meta.source, description: meta.description,
-      access: previewAccess.info(meta), accessCode: createdAccess.code });
+      ...classification.normalize(meta), access: previewAccess.info(meta), accessCode: createdAccess.code });
   });
 });
 
@@ -181,7 +265,8 @@ app.get('/api/me', requireToken, (req, res) => {
 });
 
 app.get('/api/me/items', requireToken, (req, res) => {
-  const items = store.listBySource(req.account.name).map(mapItem);
+  const filters = listFilters(req.query);
+  const items = withVisits(store.listBySource(req.account.name).map(mapItem)).filter((item) => matchesFilters(item, filters));
   res.json({ items, account: accounts.publicAccountInfo(req.account) });
 });
 
@@ -251,6 +336,34 @@ function requireAdmin(req, res, next) {
   res.redirect('/admin/login');
 }
 
+// 访问统计：按天的打开次数、访问码漏斗、热门资源、按项目分布，以及访问码状态快照。
+function visitSummary(query = {}) {
+  const text = (value) => (typeof value === 'string' ? value.trim().slice(0, 120) : '');
+  const filters = {
+    source: text(query.source),
+    type: ['html', 'image', 'video'].includes(query.type) ? query.type : '',
+    project: text(query.project) === '-' ? '-' : classification.normalizeLabel(text(query.project)),
+  };
+  const current = store.listAll().map((meta) => ({ ...meta, ...classification.normalize(meta) }))
+    .filter((item) => (!filters.source || item.source === filters.source) && (!filters.type || item.type === filters.type)
+      && (!filters.project || item.project === (filters.project === '-' ? '' : filters.project)));
+  // 默认访问码有效期为 7 天，「即将到期」取 3 天，避免新上传的资源全部被算进去。
+  const soon = Date.now() + 3 * 86400000;
+  const accessStatus = { public: 0, active: 0, expiringSoon: 0, expired: 0, unconfigured: 0 };
+  for (const item of current) {
+    const access = previewAccess.info(item);
+    if (!access.required) accessStatus.public++;
+    else if (!access.configured) accessStatus.unconfigured++;
+    else if (access.expired) accessStatus.expired++;
+    else {
+      accessStatus.active++;
+      if (access.expiresAt && Date.parse(access.expiresAt) <= soon) accessStatus.expiringSoon++;
+    }
+  }
+  const result = visits.summary({ from: query.from, to: query.to, ...filters }, current);
+  return { ...result, timezone: config.statistics.timezone, filters, current: current.length, accessStatus };
+}
+
 app.get('/admin/statistics', requireAdmin, (_req, res) => {
   res.set('Cache-Control', 'no-store');
   res.sendFile(path.join(__dirname, 'views', 'statistics.html'));
@@ -258,6 +371,7 @@ app.get('/admin/statistics', requireAdmin, (_req, res) => {
 for (const [route, query] of [
   ['/admin/api/statistics', req => statistics.summary(req.query)],
   ['/admin/api/statistics/day', req => statistics.day(req.query)],
+  ['/admin/api/statistics/visits', req => visitSummary(req.query)],
 ]) {
   app.get(route, (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); }, requireAdmin, (req, res, next) => {
     try { res.json(query(req)); }
@@ -298,7 +412,8 @@ app.post('/admin/login', requireSameOrigin, (req, res, next) => {
 });
 
 app.post('/admin/logout', (req, res) => {
-  req.session.destroy(() => res.redirect('/admin/login'));
+  // 同时清掉会话 cookie，否则退出后的预览仍会被当作管理员访问而不计入打开次数。
+  req.session.destroy(() => { res.clearCookie('connect.sid'); res.redirect('/admin/login'); });
 });
 
 app.get('/admin', requireAdmin, (req, res) => {
@@ -320,58 +435,109 @@ async function changeAccess(req, res) {
   } catch (error) { res.status(400).json({ error: error.message }); }
 }
 app.patch('/admin/api/item/:id/access', requireAdmin, requireSameOrigin, changeAccess);
+app.get('/admin/api/item/:id/access-code', requireAdmin, (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const meta = store.readMeta(req.params.id);
+  if (!meta) return res.status(404).json({ error: 'not found' });
+  const access = previewAccess.info(meta);
+  if (!access.required) return res.status(409).json({ error: 'public', access });
+  const code = previewAccess.reveal(meta);
+  if (!code) return res.status(409).json({ error: 'not recoverable', access });
+  res.json({ accessCode: code, access, url: `${config.baseUrl}/v/${meta.id}` });
+});
 app.patch('/api/me/items/:id/access', requireToken, changeAccess);
+
+// 修改分类元数据：只更新请求中出现的字段；description 置空时回退为页面标题。
+function changeLabels(req, res) {
+  const meta = store.readMeta(req.params.id);
+  if (!meta) return res.status(404).json({ error: 'not found' });
+  if (req.account && req.account.name !== meta.source) return res.status(403).json({ error: 'forbidden' });
+  const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+  const editable = [...classification.FIELDS, 'description'];
+  if (!editable.some((field) => Object.prototype.hasOwnProperty.call(body, field))) {
+    return res.status(400).json({ error: `no editable fields (${editable.join(', ')})` });
+  }
+  const updated = { ...meta, ...classification.applyPatch(meta, body) };
+  if (Object.prototype.hasOwnProperty.call(body, 'description')) {
+    updated.description = metadata.descriptionForUpload(store.filePath(meta), meta.type, body.description);
+  }
+  store.writeMeta(meta.id, updated);
+  res.json({ ok: true, item: mapItem(updated) });
+}
+app.patch('/admin/api/item/:id/meta', requireAdmin, requireSameOrigin, changeLabels);
+
+// 批量整理：对最多 100 个资源设置分类 / 项目，或追加标签；未出现的字段保持原值。
+app.patch('/admin/api/items/meta', requireAdmin, requireSameOrigin, (req, res) => {
+  const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+  const ids = Array.isArray(body.ids) ? [...new Set(body.ids.map(String))] : [];
+  if (!ids.length || ids.length > 100) return res.status(400).json({ error: 'ids must contain 1-100 items' });
+  if (ids.some((id) => !store.isValidId(id))) return res.status(400).json({ error: 'bad id' });
+  const patch = {};
+  for (const field of ['category', 'project']) {
+    if (Object.prototype.hasOwnProperty.call(body, field)) patch[field] = body[field];
+  }
+  const addTags = classification.normalizeTags(body.addTags);
+  if (!Object.keys(patch).length && !addTags.length) {
+    return res.status(400).json({ error: 'nothing to change (category, project, addTags)' });
+  }
+  let updated = 0;
+  let missing = 0;
+  for (const id of ids) {
+    const meta = store.readMeta(id);
+    if (!meta) { missing++; continue; }
+    const labels = classification.applyPatch(meta, patch);
+    if (addTags.length) labels.tags = classification.normalizeTags([...labels.tags, ...addTags]);
+    store.writeMeta(id, { ...meta, ...labels });
+    updated++;
+  }
+  res.json({ ok: true, updated, missing });
+});
+app.patch('/api/me/items/:id/meta', requireToken, changeLabels);
 
 app.get('/admin/api/list', requireAdmin, (req, res) => {
   const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 20));
   const requestedPage = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
-  const q = String(req.query.q || '').trim().slice(0, 120).toLowerCase();
-  const type = ['html', 'image', 'video'].includes(req.query.type) ? req.query.type : '';
-  const source = String(req.query.source || '').trim().slice(0, 120);
-  const sort = ['time', 'name', 'size', 'type', 'source'].includes(req.query.sort)
+  const filters = listFilters(req.query);
+  const sort = ['time', 'name', 'size', 'type', 'source', 'category', 'project', 'agent', 'views', 'viewed'].includes(req.query.sort)
     ? req.query.sort
     : 'time';
   const order = req.query.order === 'asc' ? 'asc' : 'desc';
 
-  const indexed = resourceIndex.listPage({ page: requestedPage, pageSize, q, type, source, sort, order });
+  const indexed = resourceIndex.listPage({ page: requestedPage, pageSize, sort, order, ...filters });
   if (indexed) {
     return res.json({
       ...indexed,
-      items: indexed.items.map(mapItem),
+      items: withVisits(indexed.items.map(mapItem)),
+      visitsAvailable: resourceIndex.hasVisits(),
+      visitsSince: visits.startedAt(),
       sources: resourceIndex.sources() || [],
+      categories: classification.CATEGORIES,
+      facets: resourceIndex.facets() || {},
     });
   }
 
-  const all = store.listAll().map(mapItem);
+  const all = withVisits(store.listAll().map(mapItem));
   const sources = [...new Set(all.map((item) => item.source).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'zh'));
-  const filtered = all.filter((item) => {
-    if (type && item.type !== type) return false;
-    if (source && item.source !== source) return false;
-    if (q) {
-      const haystack = [item.filename, item.description, item.source, item.id, item.type, item.url]
-        .map((value) => String(value || '').toLowerCase())
-        .join(' ');
-      if (!haystack.includes(q)) return false;
-    }
-    return true;
-  });
+  const filtered = all.filter((item) => matchesFilters(item, filters));
   const direction = order === 'asc' ? 1 : -1;
+  const sortKey = { name: 'filename', size: 'size', type: 'type', source: 'source',
+    category: 'category', project: 'project', agent: 'agent' }[sort];
   filtered.sort((a, b) => {
     let left;
     let right;
-    if (sort === 'name') {
-      left = String(a.filename || '');
-      right = String(b.filename || '');
-    } else if (sort === 'size') {
+    if (sort === 'size') {
       left = Number(a.size) || 0;
       right = Number(b.size) || 0;
-    } else if (sort === 'type') {
-      left = String(a.type || '');
-      right = String(b.type || '');
-    } else if (sort === 'source') {
-      left = String(a.source || '');
-      right = String(b.source || '');
+    } else if (sort === 'views') {
+      left = a.visits.views;
+      right = b.visits.views;
+    } else if (sort === 'viewed') {
+      left = a.visits.lastViewedAt || '';
+      right = b.visits.lastViewedAt || '';
+    } else if (sortKey) {
+      left = String(a[sortKey] || '');
+      right = String(b[sortKey] || '');
     } else {
       left = new Date(a.createdAt).getTime() || 0;
       right = new Date(b.createdAt).getTime() || 0;
@@ -393,6 +559,10 @@ app.get('/admin/api/list', requireAdmin, (req, res) => {
     pageSize,
     totalPages,
     sources,
+    categories: classification.CATEGORIES,
+    facets: countFacets(all),
+    visitsAvailable: visits.isAvailable(),
+    visitsSince: visits.startedAt(),
   });
 });
 
@@ -455,6 +625,13 @@ app.get('/', (req, res) => {
 
 // ---- 启动 ----
 startCleanupScheduler();
+// 退出前把内存中的访问计数写入磁盘（PM2 重启发送 SIGINT）。
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.once(signal, () => {
+    visits.stop();
+    process.exit(0);
+  });
+}
 app.listen(config.port, () => {
   const mode = config.preview.proxyToRender
     ? `preview→${config.preview.renderUrl}`

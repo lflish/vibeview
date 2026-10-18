@@ -72,6 +72,7 @@ mkdir -p "$DATA"/{html,images,videos,meta} "$TMP/fixtures"
 MARKER="SMOKE_HTML_$(openssl rand -hex 4)"
 printf '<!DOCTYPE html><html><body><h1>%s</h1></body></html>\n' "$MARKER" >"$TMP/fixtures/page.html"
 printf 'not-allowed\n' >"$TMP/fixtures/note.txt"
+printf '<!DOCTYPE html><html><head><meta name="dview:category" content="slides"><meta name="dview:tags" content="Deck"><title>Meta deck</title></head><body></body></html>\n' >"$TMP/fixtures/deck.html"
 
 python3 - "$TMP/fixtures/dot.png" <<'PY'
 import struct, zlib, pathlib, sys
@@ -315,6 +316,96 @@ print("ok admin page", data["total"])
 PY
 ok "admin list returns description and paginated result"
 
+log "== 9b classification =="
+CODE="$(curl -s -o "$TMP/cls.json" -w '%{http_code}' \
+  -H "Authorization: Bearer ${TOKEN_B}" \
+  -F "file=@${TMP}/fixtures/page.html" \
+  --form-string 'category=Game' --form-string 'agent=Claude Code' --form-string 'model=claude-opus-5-5' \
+  --form-string 'project=Arcade' --form-string 'tags=h5,Demo' --form-string 'tags=extra' \
+  "$BASE/upload")"
+assert_eq "$CODE" "200" "upload with classification fields"
+ID_CLS="$(json_get "$TMP/cls.json" "['id']")"
+python3 - "$TMP/cls.json" "$DATA/meta/$ID_CLS.json" <<'PY'
+import json, sys
+resp, meta = (json.load(open(p)) for p in sys.argv[1:3])
+for d in (resp, meta):
+    assert d["category"] == "game" and d["agent"] == "claude-code" and d["project"] == "arcade", d
+    assert d["model"] == "claude-opus-5-5", d
+    assert "h5" in d["tags"] and "demo" in d["tags"], d
+print("ok", meta["tags"])
+PY
+ok "classification normalized in response and meta"
+
+CODE="$(curl -s -o "$TMP/deck.json" -w '%{http_code}' \
+  -H "Authorization: Bearer ${TOKEN_B}" -F "file=@${TMP}/fixtures/deck.html" \
+  --form-string 'category=not-a-category' "$BASE/upload")"
+ID_DECK="$(json_get "$TMP/deck.json" "['id']")"
+assert_eq "$(json_get "$TMP/deck.json" "['category']")" "other" "unknown explicit category → other"
+assert_eq "$(json_get "$TMP/deck.json" "['tags']")" "['deck']" "HTML dview:tags fallback"
+curl -s -H "Authorization: Bearer ${TOKEN_B}" -F "file=@${TMP}/fixtures/deck.html" "$BASE/upload" >"$TMP/deck2.json"
+ID_DECK2="$(json_get "$TMP/deck2.json" "['id']")"
+assert_eq "$(json_get "$TMP/deck2.json" "['category']")" "slides" "HTML dview:category fallback"
+
+curl -s -b "$COOKIE_JAR" -o "$TMP/afilter.json" "$BASE/admin/api/list?category=game&project=Arcade&tag=h5"
+python3 - "$TMP/afilter.json" "$ID_CLS" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["total"] == 1 and d["items"][0]["id"] == sys.argv[2], d
+assert "game" in d["categories"], d
+assert {"value": "game", "count": 1} in d["facets"]["category"], d["facets"]
+assert any(f["value"] == "claude-code" for f in d["facets"]["agent"]), d["facets"]
+print("ok")
+PY
+ok "admin list filters by category/project/tag with facets"
+curl -s -b "$COOKIE_JAR" -o "$TMP/anone.json" "$BASE/admin/api/list?category=none&pageSize=100"
+assert_eq "$(python3 -c "import json;d=json.load(open('$TMP/anone.json'));print(all(i['category']=='' for i in d['items']) and d['total']>0)")" "True" "admin list category=none"
+
+CODE="$(curl -s -b "$COOKIE_JAR" -o "$TMP/patch.json" -w '%{http_code}' -X PATCH \
+  -H 'Content-Type: application/json' --data '{"category":"dashboard","tags":"kpi, q3"}' \
+  "$BASE/admin/api/item/$ID_CLS/meta")"
+assert_eq "$CODE" "200" "admin PATCH meta"
+python3 - "$DATA/meta/$ID_CLS.json" <<'PY'
+import json, sys
+m = json.load(open(sys.argv[1]))
+assert m["category"] == "dashboard" and m["tags"] == ["kpi", "q3"] and m["project"] == "arcade", m
+assert m["access"], "access policy kept"
+print("ok")
+PY
+ok "admin PATCH keeps unspecified fields"
+CODE="$(curl -s -b "$COOKIE_JAR" -o /dev/null -w '%{http_code}' -X PATCH \
+  -H 'Content-Type: application/json' --data '{"nope":1}' "$BASE/admin/api/item/$ID_CLS/meta")"
+assert_eq "$CODE" "400" "PATCH meta without editable fields → 400"
+CODE="$(curl -s -o /dev/null -w '%{http_code}' -X PATCH -H 'Content-Type: application/json' \
+  --data '{"category":"game"}' "$BASE/admin/api/item/$ID_CLS/meta")"
+assert_eq "$CODE" "401" "admin PATCH meta without session → 401"
+CODE="$(curl -s -o /dev/null -w '%{http_code}' -X PATCH -H "Authorization: Bearer ${TOKEN_A}" \
+  -H 'Content-Type: application/json' --data '{"category":"game"}' "$BASE/api/me/items/$ID_CLS/meta")"
+assert_eq "$CODE" "403" "other account PATCH meta → 403"
+CODE="$(curl -s -o "$TMP/mepatch.json" -w '%{http_code}' -X PATCH -H "Authorization: Bearer ${TOKEN_B}" \
+  -H 'Content-Type: application/json' --data '{"project":"","description":"Renamed"}' "$BASE/api/me/items/$ID_CLS/meta")"
+assert_eq "$CODE" "200" "owner PATCH meta"
+assert_eq "$(json_get "$TMP/mepatch.json" "['item']['project']")|$(json_get "$TMP/mepatch.json" "['item']['description']")" "|Renamed" "owner PATCH clears project, sets description"
+curl -fsS -H "Authorization: Bearer ${TOKEN_B}" "$BASE/api/me/items?category=dashboard" >"$TMP/mefilter.json"
+assert_eq "$(python3 -c "import json;print([i['id'] for i in json.load(open('$TMP/mefilter.json'))['items']])")" "['$ID_CLS']" "/api/me/items category filter"
+CODE="$(curl -s -b "$COOKIE_JAR" -o "$TMP/bulkmeta.json" -w '%{http_code}' -X PATCH -H 'Content-Type: application/json' \
+  --data "{\"ids\":[\"$ID_DECK\",\"$ID_DECK2\",\"zzzzzzzzzzzzzzzz\"],\"category\":\"report\",\"addTags\":\"Batch\"}" \
+  "$BASE/admin/api/items/meta")"
+assert_eq "$CODE" "200" "admin bulk PATCH meta"
+assert_contains "$(cat "$TMP/bulkmeta.json")" '"updated":2' "bulk meta updated count"
+python3 - "$DATA/meta/$ID_DECK.json" "$DATA/meta/$ID_DECK2.json" <<'PY'
+import json, sys
+a, b = (json.load(open(p)) for p in sys.argv[1:3])
+assert a["category"] == b["category"] == "report", (a, b)
+assert a["tags"] == ["deck", "batch"] and b["tags"] == ["deck", "batch"], (a["tags"], b["tags"])
+print("ok")
+PY
+ok "bulk meta sets category and appends tags"
+CODE="$(curl -s -b "$COOKIE_JAR" -o /dev/null -w '%{http_code}' -X PATCH -H 'Content-Type: application/json' \
+  --data "{\"ids\":[\"$ID_DECK\"]}" "$BASE/admin/api/items/meta")"
+assert_eq "$CODE" "400" "bulk meta without changes → 400"
+curl -s -b "$COOKIE_JAR" -X DELETE -H 'Content-Type: application/json' \
+  --data "{\"ids\":[\"$ID_CLS\",\"$ID_DECK\",\"$ID_DECK2\"]}" "$BASE/admin/api/items" >/dev/null
+
 log "== 9a admin bulk delete =="
 curl -s -o "$TMP/bulk1.json" -w '%{http_code}' \
   -H "Authorization: Bearer ${TOKEN_B}" \
@@ -400,6 +491,34 @@ CLI_ID="$(basename "$CLI_URL")"
 if "$ROOT/bin/dview" me | grep -q 'account-b'; then ok "dview me"; else fail "dview me"; fi
 if "$ROOT/bin/dview" list | grep -q "$CLI_ID"; then ok "dview list contains upload"; else fail "dview list"; fi
 if "$ROOT/bin/dview" delete "$CLI_ID" | grep -q "deleted"; then ok "dview delete"; else fail "dview delete"; fi
+
+CLI_JSON="$(DVIEW_AGENT='Smoke Agent' DVIEW_MODEL='m-1' "$ROOT/bin/dview" upload "$TMP/fixtures/page.html" --json \
+  --category report --tag weekly --tag 'ops, q3')"
+printf '%s' "$CLI_JSON" >"$TMP/cli.json"
+CLI_ID="$(json_get "$TMP/cli.json" "['id']")"
+assert_eq "$(json_get "$TMP/cli.json" "['category']")|$(json_get "$TMP/cli.json" "['agent']")|$(json_get "$TMP/cli.json" "['model']")|$(json_get "$TMP/cli.json" "['tags']")" \
+  "report|smoke-agent|m-1|['weekly', 'ops', 'q3']" "dview upload sends category/agent/model/tags"
+GIT_PROJECT="$(git -C "$TMP" rev-parse --show-toplevel 2>/dev/null || git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -n "$GIT_PROJECT" ]]; then
+  WANT_PROJECT="$(node -e "console.log(require('./lib/classification').normalizeLabel(process.argv[1]))" "$(basename "$GIT_PROJECT")")"
+  assert_eq "$(cd "$ROOT" && json_get "$TMP/cli.json" "['project']")" "$WANT_PROJECT" "dview upload detects git project"
+fi
+NO_DETECT="$(DVIEW_AGENT=x "$ROOT/bin/dview" upload "$TMP/fixtures/page.html" --json --no-detect)"
+printf '%s' "$NO_DETECT" >"$TMP/nodetect.json"
+assert_eq "$(json_get "$TMP/nodetect.json" "['agent']")|$(json_get "$TMP/nodetect.json" "['project']")" "|" "dview upload --no-detect"
+"$ROOT/bin/dview" delete "$(json_get "$TMP/nodetect.json" "['id']")" >/dev/null
+if "$ROOT/bin/dview" list --category report | grep -q "$CLI_ID"; then ok "dview list --category"; else fail "dview list --category"; fi
+if "$ROOT/bin/dview" list --category game | grep -q "$CLI_ID"; then fail "dview list --category excludes others"; else ok "dview list --category excludes others"; fi
+if "$ROOT/bin/dview" edit "$CLI_ID" --category doc --tag '' | grep -q "updated"; then ok "dview edit"; else fail "dview edit"; fi
+python3 - "$DATA/meta/$CLI_ID.json" <<'PY'
+import json, sys
+m = json.load(open(sys.argv[1]))
+assert m["category"] == "doc" and m["tags"] == [] and m["agent"] == "smoke-agent", m
+print("ok")
+PY
+ok "dview edit updates only given fields"
+if "$ROOT/bin/dview" edit "$CLI_ID" >/dev/null 2>&1; then fail "dview edit without fields should fail"; else ok "dview edit without fields fails"; fi
+"$ROOT/bin/dview" delete "$CLI_ID" >/dev/null
 
 log "== summary =="
 

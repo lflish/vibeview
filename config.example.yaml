@@ -32,6 +32,9 @@ access:
   max_attempts: 10
   retry_window_minutes: 10
   attempts_file: "./data/preview-attempts.json"
+  # 管理端查看访问码所用的加密密钥；缺省使用 admin.session_secret。
+  # 更换后已有访问码仍可验证，但需重置才能在管理端查看。
+  # code_secret: "replace-with-a-random-secret"
 
 # 上传账户列表：每个 token 即一个「账户 / 来源」。
 # name 会写入资源 meta.source，用于管理端筛选、用量统计与自助 API 鉴权。
@@ -65,6 +68,7 @@ statistics:
   timezone: "Asia/Shanghai"
   # 缺省为 storage.meta_dir 旁的 statistics/；发布/回滚保留，备份包含此目录。
   # 单个主服务进程拥有日志；不与资源目录共用。
+  # 预览访问计数（每日打开次数、访问码验证）保存在此目录的 visits.sqlite，同样需要保留和备份。
   directory: "./data/statistics"
 
 # 预览渲染 sidecar（可选）。默认关闭：主服务本地直出 /v（无 Docker 开发）。
