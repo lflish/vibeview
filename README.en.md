@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/lflish/vibeview/actions/workflows/ci.yml"><img src="https://github.com/lflish/vibeview/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22-43853d?style=flat-square&amp;logo=nodedotjs&amp;logoColor=white" alt="Node.js 22"></a>
   <a href="docs/user-guide.en.md#deployment"><img src="https://img.shields.io/badge/deploy-self--hosted-2563eb?style=flat-square" alt="Self-hosted"></a>
   <a href="#access-protection-and-retention"><img src="https://img.shields.io/badge/access-code%20protected-2563eb?style=flat-square" alt="Access-code protected"></a>
@@ -191,3 +192,5 @@ Run the Node.js main service under PM2 or systemd. Public deployments need HTTPS
 The current scope is one administrator, one main-service process, and local file storage. Protected HTML uses a browser sandbox; pages that depend on browser storage or same-origin requests need adaptation. See [browser behavior](docs/user-guide.en.md#browser-behavior-of-html).
 
 [Report an issue](https://github.com/lflish/vibeview/issues) or [contribute code](https://github.com/lflish/vibeview/pulls). Include your runtime environment, reproduction steps, and sanitized logs. Keep both language versions, configuration examples, and relevant tests in sync when changing defaults.
+
+Every push to `main` and every pull request runs unit, integration, smoke, and browser tests through [GitHub Actions](https://github.com/lflish/vibeview/actions/workflows/ci.yml). Reproduce locally with `npm test` and `npm run test:browser`. Deployment stays manual; CI never deploys to a server.

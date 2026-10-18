@@ -318,6 +318,7 @@ npm run smoke:render               # Render tests; adds a real container check w
 
 # These require Playwright and Chromium: npm install adds the pinned playwright devDependency;
 # if the browser is missing, run npx playwright install chromium
+npm run test:browser               # Runs all browser tests below at once (CI runs this too)
 npm run test:admin
 npm run test:theme
 npm run test:access -- --browser

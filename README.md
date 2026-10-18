@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/lflish/vibeview/actions/workflows/ci.yml"><img src="https://github.com/lflish/vibeview/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22-43853d?style=flat-square&amp;logo=nodedotjs&amp;logoColor=white" alt="Node.js 22"></a>
   <a href="docs/user-guide.zh-CN.md#部署"><img src="https://img.shields.io/badge/deploy-self--hosted-2563eb?style=flat-square" alt="Self-hosted"></a>
   <a href="#访问保护与文件保留"><img src="https://img.shields.io/badge/access-code%20protected-2563eb?style=flat-square" alt="Access-code protected"></a>
@@ -191,3 +192,5 @@ dview delete Ab3xK9mP2qR7sT1v                      # 删除本账户资源
 当前适合单管理员、单个主服务进程和本地文件存储。受保护 HTML 使用浏览器 sandbox；依赖浏览器存储或同源请求的页面需要适配，详见 [浏览器行为](docs/user-guide.zh-CN.md#html-的浏览器行为)。
 
 欢迎 [报告问题](https://github.com/lflish/vibeview/issues) 或 [贡献代码](https://github.com/lflish/vibeview/pulls)。反馈时附上运行环境、复现步骤和脱敏日志；修改默认行为时同步维护中英文文档、配置示例和相关测试。
+
+推送到 `main` 和每个 Pull Request 都会通过 [GitHub Actions](https://github.com/lflish/vibeview/actions/workflows/ci.yml) 自动运行单元、集成、冒烟和浏览器测试；本地可用 `npm test` 与 `npm run test:browser` 复现。部署仍按需手动执行，不会自动发布到服务器。
