@@ -131,6 +131,8 @@ if [ "$INSTALL_CLI" = "1" ]; then
   info "安装 CLI 到: $CLI_PATH"
   fetch_or_copy "bin/dview" "$CLI_PATH"
   chmod +x "$CLI_PATH"
+  # vibeview 是同一个 CLI 的别名，和项目名保持一致
+  ln -sf dview "$CLI_PREFIX/vibeview"
   case ":$PATH:" in
     *":$CLI_PREFIX:"*) ;;
     *)
@@ -185,6 +187,6 @@ info "安装完成 ✅"
 [ -n "$CLI_PATH" ] && echo "  CLI 位置:   $CLI_PATH"
 echo "  使用方法:"
 [ "$INSTALL_CLAUDE" = "1" ] && echo "    Claude Code: /$COMMAND_NAME <页面描述>"
-[ -n "$CLI_PATH" ] && echo "    CLI:         dview upload <文件路径>"
+[ -n "$CLI_PATH" ] && echo "    CLI:         dview upload <文件路径>（也可用 vibeview）"
 [ "$INSTALL_CLAUDE" = "1" ] && echo "    Skill 脚本:  bash $DEST/upload.sh <文件路径>"
 echo "  其它 AI / CI: 见仓库 docs/integrations.md 与 AGENTS.md"

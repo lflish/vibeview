@@ -491,6 +491,9 @@ CLI_ID="$(basename "$CLI_URL")"
 if "$ROOT/bin/dview" me | grep -q 'account-b'; then ok "dview me"; else fail "dview me"; fi
 if "$ROOT/bin/dview" list | grep -q "$CLI_ID"; then ok "dview list contains upload"; else fail "dview list"; fi
 if "$ROOT/bin/dview" delete "$CLI_ID" | grep -q "deleted"; then ok "dview delete"; else fail "dview delete"; fi
+# vibeview 别名：安装脚本建的是指向 dview 的软链接
+ln -sf "$ROOT/bin/dview" "$TMP/vibeview"
+if "$TMP/vibeview" me | grep -q 'account-b'; then ok "vibeview alias"; else fail "vibeview alias"; fi
 
 CLI_JSON="$(DVIEW_AGENT='Smoke Agent' DVIEW_MODEL='m-1' "$ROOT/bin/dview" upload "$TMP/fixtures/page.html" --json \
   --category report --tag weekly --tag 'ops, q3')"

@@ -1,0 +1,11 @@
+# 每天 03:30 左右运行一次；机器当时关机的话，开机后补跑。
+[Unit]
+Description=Daily vibeview data backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

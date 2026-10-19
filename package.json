@@ -6,13 +6,14 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "backup": "node scripts/backup.js",
     "test:theme": "node scripts/test-theme.js",
     "test:access": "node scripts/test-access-attempts.js && node scripts/test-access.js",
     "test:admin-login": "node scripts/test-admin-login.js",
     "render": "node render-server.js",
     "smoke:render": "bash scripts/smoke-render.sh",
     "test:admin": "node scripts/test-admin-ui.js",
-    "test": "node scripts/test-retention.js && node scripts/test-metadata.js && node scripts/test-classification.js && node scripts/test-resource-index.js && node scripts/test-admin-login.js && npm run test:statistics && bash scripts/smoke.sh",
+    "test": "node scripts/test-retention.js && node scripts/test-metadata.js && node scripts/test-classification.js && node scripts/test-resource-index.js && node scripts/test-backup.js && node scripts/test-admin-login.js && npm run test:statistics && bash scripts/smoke.sh",
     "smoke": "bash scripts/smoke.sh",
     "test:statistics": "node scripts/test-statistics.js && node scripts/test-statistics-integration.js && node scripts/test-visits.js",
     "test:visits": "node scripts/test-visits.js",
@@ -26,7 +27,8 @@
     "nanoid": "^3.3.20"
   },
   "bin": {
-    "dview": "bin/dview"
+    "dview": "bin/dview",
+    "vibeview": "bin/dview"
   },
   "files": [
     "bin/",

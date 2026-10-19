@@ -142,7 +142,7 @@ bash bin/dview upload ./report.html --json
 
 打开链接、输入访问码，即可预览。AI 和脚本应保存 `url`、`accessCode`、`access.expiresAt` 三个字段；访问码不要放进链接或生成的 HTML 中。
 
-执行 `npm link` 后，可以直接使用 `dview`：
+执行 `npm link` 后，可以直接使用 `dview`（也可写作 `vibeview`）：
 
 ```bash
 dview upload ./report.html --json --access-days 1 # 访问码有效期 1 天
@@ -173,7 +173,7 @@ dview delete Ab3xK9mP2qR7sT1v                      # 删除本账户资源
 
 ## 部署
 
-主服务使用 Node.js，可由 PM2 或 systemd 守护；公网部署配置 HTTPS 和实际的 `server.base_url`。可选 Docker render sidecar 只读挂载文件，通过主服务的认证代理提供预览。
+主服务使用 Node.js，可由 PM2 或 systemd 守护；公网部署配置 HTTPS 和实际的 `server.base_url`。`npm run backup` 把全部数据打成一个备份包，可配合 systemd 定时器每天自动执行。可选 Docker render sidecar 只读挂载文件，通过主服务的认证代理提供预览。
 
 [部署步骤与 gateway 密钥](docs/user-guide.zh-CN.md#部署) · [Sidecar 设计](docs/design-render-sidecar.md) · [本项目 TX 发布 Skill](.agents/skills/deploy-tx/SKILL.md)
 

@@ -76,7 +76,7 @@ Open `url` and enter `accessCode` to view the preview. **Save the code and expir
 
 ### CLI
 
-Use `bash bin/dview` inside the repository, or run `npm link` to register `dview`. The CLI is distributed through this repository or the installer; it has not been published to the npm registry.
+Use `bash bin/dview` inside the repository, or run `npm link` to register `dview` (and the equivalent alias `vibeview`). The CLI is distributed through this repository or the installer; it has not been published to the npm registry.
 
 ```bash
 dview upload ./report.html --json                 # URL, access code, expiration
@@ -243,6 +243,20 @@ The main service handles uploads, access verification, administration, accounts,
 
 Back up `config.yaml`, uploaded data, and restricted environment files. JSON metadata is the authoritative resource record; `data/resources.sqlite` is a rebuildable query index. Keep configured tokens, passwords, and session secrets private. Give upload credentials only to machines or users that need to upload.
 
+#### Data backups
+
+`npm run backup` (`node scripts/backup.js`) packs uploaded files, metadata, the statistics directory, account and rate-limit state files, and `config.yaml` into one `auto-<time>.tar.gz`. It defaults to `data/backups/` (mode 700) and keeps the latest 14 automatic backups without touching manual ones. It is safe to run while the service is up: statistics events are atomically written single files, and `visits.sqlite` is snapshotted consistently first. Visit counts still in memory (at most 30 seconds) are not included.
+
+| Option | Meaning |
+| :--- | :--- |
+| `--dest DIR` | Backup directory |
+| `--keep N` | Keep the latest N automatic backups; `0` disables pruning |
+| `--no-config` | Leave out `config.yaml` (it contains tokens and the admin password) |
+
+For a daily backup with systemd, set the repository path in both files under [examples/systemd](../examples/systemd/), copy them to `~/.config/systemd/user/`, then run `systemctl --user daemon-reload && systemctl --user enable --now vibeview-backup.timer`. User services need `loginctl enable-linger` to run while logged out. PM2 deployments can use crontab instead, e.g. `30 3 * * * cd /path/to/vibeview && node scripts/backup.js`. Backups sit on the same disk as the data, so copy important ones to another machine regularly.
+
+To restore: stop the main service, extract the backup to a temporary directory, move each directory and file back to the original path recorded in the archive's `manifest.json`, then start the service. `resources.sqlite` is not backed up; it is rebuilt on startup.
+
 ### Docker render sidecar
 
 The sidecar renders previews while the main service stays on the host. It mounts `./data` read-only and does not mount `config.yaml`. Protected previews reach the sidecar only after verification by the main service.
@@ -269,7 +283,7 @@ If the port is occupied, change `RENDER_HOST_PORT` and the main service's `previ
 
 ### Browser behavior of HTML
 
-Upload only trusted content. Protected HTML uses `sandbox allow-scripts` to isolate same-origin privileges. Scripts can run, but browser storage and same-origin requests may be unavailable; pages relying on those features need adaptation. Explicitly public HTML does not receive that isolation. The Docker sidecar provides server-process isolation, which does not replace browser isolation.
+Upload only trusted content. Every HTML preview, including explicitly public ones, uses `sandbox allow-scripts` to isolate same-origin privileges, so page scripts cannot call admin APIs with an administrator's session. Scripts can run, but browser storage and same-origin requests are unavailable; pages relying on those features need adaptation. The Docker sidecar provides server-process isolation, which does not replace browser isolation.
 
 For `NET::ERR_CERT_DATE_INVALID`, check the validity of the certificate actually served to visitors. After renewal, install the certificate and reload the reverse proxy. The [Nginx certificate helper](../scripts/install-nginx-cert.sh) requires target paths matching your deployment and administrator sudo privileges.
 

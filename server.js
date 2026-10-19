@@ -419,6 +419,12 @@ app.post('/admin/logout', (req, res) => {
 app.get('/admin', requireAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'admin.html'));
 });
+// 管理页的样式和脚本，与页面一样需要登录。
+for (const asset of ['admin.css', 'admin.js']) {
+  app.get(`/admin/${asset}`, requireAdmin, (_req, res) => {
+    res.sendFile(path.join(__dirname, 'views', asset));
+  });
+}
 
 async function changeAccess(req, res) {
   const meta = store.readMeta(req.params.id);

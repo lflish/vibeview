@@ -76,7 +76,7 @@ bash bin/dview upload /path/to/report.html --json
 
 ### CLI
 
-在仓库内使用 `bash bin/dview`，或执行 `npm link` 将命令注册为 `dview`。CLI 通过本仓库或安装脚本分发，尚未发布到 npm registry。
+在仓库内使用 `bash bin/dview`，或执行 `npm link` 将命令注册为 `dview`（同时注册等价的别名 `vibeview`）。CLI 通过本仓库或安装脚本分发，尚未发布到 npm registry。
 
 ```bash
 dview upload ./report.html --json                 # 链接、访问码、到期时间
@@ -244,6 +244,20 @@ statistics:
 
 备份 `config.yaml`、上传数据及受限环境文件。JSON 元数据是资源的权威记录，`data/resources.sqlite` 是可重建的查询索引。配置中的 token、密码和 session secret 不要公开；上传凭据应只发给需要上传的机器或用户。
 
+#### 数据备份
+
+`npm run backup`（即 `node scripts/backup.js`）把上传文件、元数据、统计目录、账户与限流状态文件和 `config.yaml` 打成一个 `auto-<时间>.tar.gz`，默认放在 `data/backups/`（权限 700），只保留最近 14 份自动备份，不会删除手动备份。服务运行时也可以执行：统计事件是原子写入的单个文件，`visits.sqlite` 会先做一致快照；尚在内存中的访问计数（最多 30 秒）不会进入本次备份。
+
+| 参数 | 说明 |
+| :--- | :--- |
+| `--dest DIR` | 备份目录 |
+| `--keep N` | 保留最近 N 份自动备份，`0` 表示不清理 |
+| `--no-config` | 不打包 `config.yaml`（它含 token 与管理员密码） |
+
+每日自动备份可用 systemd 定时器：把 [examples/systemd](../examples/systemd/) 中两个文件的仓库路径改成实际目录，复制到 `~/.config/systemd/user/`，然后执行 `systemctl --user daemon-reload && systemctl --user enable --now vibeview-backup.timer`。用户服务需要 `loginctl enable-linger` 才能在未登录时运行。PM2 部署可改用 crontab，例如 `30 3 * * * cd /path/to/vibeview && node scripts/backup.js`。备份与数据在同一块磁盘上，重要数据请再定期复制到另一台机器。
+
+恢复：停止主服务，把备份解包到临时目录，按包内 `manifest.json` 记录的原路径放回各目录和文件，再启动服务。`resources.sqlite` 不在备份中，启动时会自动重建。
+
 ### Docker render sidecar
 
 Sidecar 只负责渲染预览，主服务继续运行在宿主机。容器只读挂载 `./data`，不挂载 `config.yaml`；受保护预览必须经主服务验证后进入 sidecar。
@@ -270,7 +284,7 @@ npm start
 
 ### HTML 的浏览器行为
 
-只上传可信内容。受保护 HTML 使用 `sandbox allow-scripts` 隔离同源权限；脚本可以运行，但浏览器存储和同源请求可能不可用，依赖这些能力的页面需要适配。显式公开的 HTML 不应用该隔离。Docker sidecar 提供服务端进程隔离，不能代替浏览器端隔离。
+只上传可信内容。所有 HTML 预览（包括显式公开的）都使用 `sandbox allow-scripts` 隔离同源权限，页面脚本无法借管理员的登录状态调用管理接口；脚本可以运行，但浏览器存储和同源请求不可用，依赖这些能力的页面需要适配。Docker sidecar 提供服务端进程隔离，不能代替浏览器端隔离。
 
 浏览器提示 `NET::ERR_CERT_DATE_INVALID` 时，检查实际对外证书的有效期；续期后还需安装证书并重新加载反向代理。项目提供 [Nginx 证书安装辅助脚本](../scripts/install-nginx-cert.sh)，其目标路径需要与部署配置一致，执行需要管理员的 sudo 权限。
 

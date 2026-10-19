@@ -112,6 +112,11 @@ async function run() {
   const valid = await login('test', 'isolated-password', { 'x-forwarded-for': '198.51.100.14' }); assert.equal(valid.status, 302);
   assert.equal(valid.headers.get('location'), '/admin'); const cookie = valid.headers.get('set-cookie').split(';')[0];
   assert.equal((await request('/admin/api/list', { headers: { cookie } })).status, 200);
+  // The admin page's own stylesheet and script are only served after login.
+  for (const asset of ['/admin/admin.css', '/admin/admin.js']) {
+    const anonymous = await request(asset); assert.equal(anonymous.status, 302); assert.equal(anonymous.headers.get('location'), '/admin/login');
+    assert.equal((await request(asset, { headers: { cookie } })).status, 200);
+  }
   console.log('admin login integration: direct/proxy IP spoofing, user rotation, global cap, restart, 429, session and expiry passed');
 }
 

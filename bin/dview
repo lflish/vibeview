@@ -13,7 +13,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-vibeview CLI — 上传并管理本账户预览资源
+vibeview CLI — 上传并管理本账户预览资源（dview 与 vibeview 两个命令名等价）
 
 用法:
   dview upload <file>     上传文件，stdout 打印预览 URL

@@ -1,0 +1,11 @@
+# vibeview 每日数据备份（systemd 用户服务）
+# 安装：把 /path/to/vibeview 换成仓库目录后复制到 ~/.config/systemd/user/，
+#       再执行 systemctl --user daemon-reload && systemctl --user enable --now vibeview-backup.timer
+[Unit]
+Description=vibeview data backup
+
+[Service]
+Type=oneshot
+WorkingDirectory=/path/to/vibeview
+Environment=NODE_NO_WARNINGS=1
+ExecStart=/usr/bin/node scripts/backup.js --keep 14
