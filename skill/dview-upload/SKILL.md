@@ -1,6 +1,6 @@
 ---
 name: dview-upload
-description: 将本地 HTML / 图片 / 视频上传到 vibeview 预览服务并获得可分享的预览链接。当你生成了 HTML 图表、网页、截图、图片或视频，但只能输出到终端、无法直接在浏览器中预览时使用。返回一个公网可访问的随机 URL。也可列出或删除本账户已上传资源。
+description: 将本地 HTML / 图片 / 视频，或多页面站点目录上传到 vibeview 预览服务并获得可分享的预览链接。当你生成了 HTML 图表、网页、多页面原型或前端项目、截图、图片或视频，但只能输出到终端、无法直接在浏览器中预览时使用。返回一个公网可访问的随机 URL。也可列出或删除本账户已上传资源。
 ---
 
 # dview-upload
@@ -8,8 +8,44 @@ description: 将本地 HTML / 图片 / 视频上传到 vibeview 预览服务并�
 把本地文件上传到 vibeview 预览服务，得到一个可在浏览器打开的预览链接。
 
 - HTML 文件：直接渲染为网页
+- 多页面站点（目录或 zip，根部有 `index.html`）：整个目录作为一个资源，页面之间用相对路径跳转
 - 图片（png/jpg/gif/webp/svg）：在预览页居中展示
 - 视频（mp4/webm）：在预览页用播放器展示
+
+## 两种模式：简单页面 / 多页面站点
+
+生成网页前先选模式。用户指定了就照做（`/dview --simple`、`/dview --site`，或说「单页」「多页面」「站点」「项目」）；没指定时按下面的标准判断，**满足任一条就用站点模式，否则用简单模式**：
+
+- 需要 2 个及以上真正独立的页面（如首页 + 详情页 + 设置页），并且用户会在页面间跳转；
+- 需要分开的资源文件：多张图片、数据文件（JSON / CSV）、字体、音视频；
+- 是前端框架或构建工具的产物（Vite、React、Vue 等打包出的 `dist/`）；
+- 写成单文件会很大（预计超过约 1 MB），或单文件里内联的代码已经难以维护。
+
+能用一个页面讲清楚的报告、图表、看板、小游戏、单个原型，都用简单模式。拿不准时用简单模式；不要为了「看起来更完整」而拆成多页面。
+
+### 简单模式（单个 HTML）
+
+生成一个自包含的 `.html`：样式和脚本内联，图表可用 CDN，图片用 data URI 或外链。写到 `/tmp/dview-<英文短名>-<时间戳>.html` 后上传这个文件。
+
+### 站点模式（目录）
+
+生成到一个新目录，如 `/tmp/dview-<英文短名>-<时间戳>/`，然后上传**整个目录**：
+
+```bash
+dview upload /tmp/dview-shop-demo-20261019/ --json --category prototype
+```
+
+目录要求：
+
+- 根部必须有入口 `index.html`。压缩整个 `dist/` 目录也可以，服务端会自动去掉唯一的顶层目录。
+- **所有站内链接和资源都用相对路径**：`about.html`、`./css/app.css`、`assets/logo.png`、`fetch('data/items.json')`。不要以 `/` 开头，`/` 指向服务根目录而不是站点目录。Vite 设 `base: './'`，其他构建工具同样配置相对的公共路径。
+- 多页面用多个 `.html` 文件，或单页应用的 hash 路由（`#/detail`）。不要用 history 模式的干净路由（`/detail`），刷新会 404。可放一个 `404.html` 作为未找到页面。
+- 只能是静态文件：没有后端、不能调用需要登录的接口；`fetch` 只读站内文件或允许跨域的公开 API。
+- 页面运行在浏览器沙箱里（独立的 opaque origin）：`localStorage`、`sessionStorage`、cookie 不可用或会抛异常，读写时要 `try/catch` 并回退到内存状态。
+- 不要放 `node_modules/`、构建缓存、`.env` 或任何密钥。上传时会跳过 `.` 开头的文件和目录、`node_modules` 和符号链接。
+- 上限（服务端可调）：最多 500 个文件、解压后共 50 MB、zip 包 50 MB。只接受常见网页资源类型：html、css、js/mjs、json、txt、md、csv、xml、svg、图片、字体、音视频、wasm、pdf、glb/gltf 等。
+
+上传后返回的 `url` 以 `/` 结尾，整个站点共用**一个访问码**；访客验证一次即可浏览所有页面。验证后地址栏里会出现 `/~<短期凭证>/` 这一段路径，它在授权到期（默认 30 分钟）后失效，分享时只分享上传返回的 `url` 和访问码，不要分享地址栏里的地址。
 
 ## 生成页面的默认风格
 
@@ -37,6 +73,8 @@ export DVIEW_TOKEN="你的token"
 
 ```bash
 dview upload <文件路径> --json
+# 多页面站点：上传目录（或现成的 .zip）
+dview upload <站点目录> --json
 # 指定有效期时：
 dview upload <文件路径> --json --access-days 7
 # 只有用户明确要求公开时：
@@ -50,7 +88,7 @@ dview me
 否则用本 Skill 自带脚本：
 
 ```bash
-bash skill/dview-upload/upload.sh <文件路径> --json --category report --tag q3
+bash skill/dview-upload/upload.sh <文件路径或站点目录> --json --category report --tag q3
 # 或全局安装后：
 bash ~/.claude/skills/dview-upload/upload.sh <文件路径> --json --category report --tag q3
 ```
@@ -108,12 +146,13 @@ dview upload /tmp/q3-report.html --json --category report --tag q3,ops --model c
 dview upload /tmp/chart.html --json --category dashboard --tag sales
 dview upload ./screenshot.png --json --category screenshot
 bash upload.sh /tmp/snake.html --json --category game --tag h5
+dview upload /tmp/dview-crm-prototype-20261019/ --json --category prototype --tag crm
 ```
 
 ## 注意
 
-- 单文件大小上限由服务端配置（默认 50MB）
-- 仅支持 HTML / 常见图片 / mp4,webm 视频
+- 单文件大小上限由服务端配置（默认 50MB）；站点另有文件数和解压后总大小上限
+- 支持 HTML / 常见图片 / mp4,webm 视频，以及多页面站点（目录或 zip）
 - 上传内容默认永久保留；管理员可配置保留天数启用自动清理。账户可能有配额（超限返回 429）
 - 预览链接是随机不可猜测的；只上传可信内容（HTML 会被浏览器执行脚本）
 - 跨工具接入见仓库 `docs/integrations.md` 与 `AGENTS.md`

@@ -1,7 +1,7 @@
 // vibeview 管理端页面脚本：资源列表、筛选、访问码与账户管理。
 (function () {
   const PAGE_SIZE = 20;
-  const TYPE_LABEL = { html: 'HTML', image: '图片', video: '视频' };
+  const TYPE_LABEL = { html: 'HTML', image: '图片', video: '视频', site: '多页面站点' };
   const CATEGORY_LABEL = {
     doc: '开发文档', report: '报告', dashboard: '数据看板', prototype: '原型', game: '游戏',
     slides: '幻灯片', tool: '工具', demo: '演示', screenshot: '截图', other: '其他',
@@ -368,6 +368,7 @@
     html: '<path d="m8 8-4 4 4 4m8-8 4 4-4 4M14 5l-4 14"/>',
     image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
     video: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/>',
+    site: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 9v11"/>',
   };
   function icon(name, size) {
     const n = size || 14;
@@ -567,7 +568,7 @@
     res.className = 'res';
     const tile = document.createElement('span');
     tile.className = 'type-tile ' + (it.type || '');
-    tile.title = TYPE_LABEL[it.type] || it.type || '';
+    tile.title = (TYPE_LABEL[it.type] || it.type || '') + (it.type === 'site' && it.fileCount ? ' · ' + it.fileCount + ' 个文件' : '');
     tile.innerHTML = icon(ICONS[it.type] ? it.type : 'html', 18);
     const body = document.createElement('div');
     body.className = 'res-body';
@@ -597,7 +598,9 @@
     tdSrc.textContent = it.source || '-';
     tdSrc.title = it.source ? '来源账户 ' + it.source : '';
 
-    cell('size num').textContent = fmtSize(it.size);
+    const tdSize = cell('size num');
+    tdSize.textContent = fmtSize(it.size);
+    if (it.type === 'site' && it.fileCount) tdSize.title = it.fileCount + ' 个文件，解压后共 ' + fmtSize(it.size);
 
     const tdTime = cell('time');
     const created = document.createElement('span');
@@ -613,7 +616,8 @@
     // 窄屏卡片布局用：来源 · 大小 · 时间合并为一行
     const before = visitsSince && String(it.createdAt || '') < visitsSince;
     const opened = !visitsAvailable || !it.visits ? '' : it.visits.views ? '打开 ' + it.visits.views + ' 次' : before ? '' : '从未打开';
-    cell('meta-col').textContent = [it.source, fmtSize(it.size), fmtShort(it.createdAt), opened].filter(Boolean).join(' · ');
+    const sizeText = fmtSize(it.size) + (it.type === 'site' && it.fileCount ? '（' + it.fileCount + ' 个文件）' : '');
+    cell('meta-col').textContent = [it.source, sizeText, fmtShort(it.createdAt), opened].filter(Boolean).join(' · ');
 
     const ops = document.createElement('div');
     ops.className = 'ops';

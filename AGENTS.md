@@ -49,6 +49,14 @@ curl -fsS -X POST "$DVIEW_URL/upload" \
 
 Parse JSON field `url` and show it to the user.
 
+Choose a mode before generating a page. Use a **single self-contained HTML file** by default.
+Use a **multi-page site** only when the work needs two or more pages that link to each other, separate
+asset files (images, data, fonts), is a front-end build (`dist/`), or would exceed about 1 MB as one file.
+Write sites to a new directory with `index.html` at the root, use relative links only (`about.html`,
+`css/app.css`; for Vite set `base: './'`), use hash routing for SPAs, and upload the directory with
+`dview upload <dir> --json`. The whole site shares one URL and one access code. Details and limits:
+`skill/dview-upload/SKILL.md`.
+
 Classify every upload so the admin can filter thousands of pages later: pass one
 `--category` (`doc`, `report`, `dashboard`, `prototype`, `game`, `slides`, `tool`,
 `demo`, `screenshot`, `other`) plus 1–3 lowercase `--tag` values, and `--model` when
@@ -71,7 +79,7 @@ Same APIs: `GET /api/me`, `GET /api/me/items`, `PATCH /api/me/items/:id/meta`, `
 
 ## Constraints
 
-- Supported: HTML, png/jpg/gif/webp/svg, mp4/webm
+- Supported: HTML, png/jpg/gif/webp/svg, mp4/webm, and multi-page sites (a directory or `.zip` with `index.html` at its root)
 - Size / quota limits are server-side; `429` means account quota exceeded
 - Only upload **trusted** content — HTML runs as scripts in the visitor's browser
 - Preview links are unguessable random IDs; still treat them as shareable URLs

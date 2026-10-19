@@ -21,6 +21,8 @@
   --green-text: #23643c;
   --orange-bg: #fff1dd;
   --orange-text: #8a4b0b;
+  --purple-bg: #f1ebff;
+  --purple-text: #6d3fd1;
   --red-bg: #feeceb;
   --red-text: #b42318;
   --overlay: rgb(15 23 42 / 35%);
@@ -59,6 +61,8 @@ table, time { font-variant-numeric: tabular-nums; }
   --green-text: #7dcea0;
   --orange-bg: #4a3a2a;
   --orange-text: #f5b041;
+  --purple-bg: #3a2f55;
+  --purple-text: #c4b0ff;
   --red-bg: #3a2020;
   --red-text: #ff9991;
   --overlay: rgb(0 0 0 / 55%);

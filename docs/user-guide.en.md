@@ -2,7 +2,7 @@
 
 [← README](../README.md) · [简体中文](user-guide.zh-CN.md)
 
-The service is named **vibeview**; its CLI is **`dview`**. Supported formats include HTML, PNG / JPG / GIF / WebP / SVG and other images, and MP4 / WebM videos. HTML descriptions use the uploaded `description` first, then fall back to `<meta name="description">`, `<title>`, or a heading. The default per-file limit is 50 MB, with indefinite retention.
+The service is named **vibeview**; its CLI is **`dview`**. Supported formats include HTML, PNG / JPG / GIF / WebP / SVG and other images, MP4 / WebM videos, and multi-page sites (a directory or zip). HTML descriptions use the uploaded `description` first, then fall back to `<meta name="description">`, `<title>`, or a heading. The default per-file limit is 50 MB, with indefinite retention.
 
 ## Quick start
 
@@ -99,6 +99,26 @@ curl -fsS -X POST "${DVIEW_URL%/}/upload" \
 ```
 
 Optional form fields: `access_days=7` sets the code's validity in days; `access_mode=public` explicitly allows public access. Omitted fields use the server defaults. Classification fields are covered in the next section.
+
+### Multi-page sites
+
+Content that does not fit in one HTML file (a prototype whose pages link to each other, a demo with images and data files, or a front-end `dist/` build) can be uploaded as a **site**: the whole directory is one resource with one link and one access code.
+
+```bash
+dview upload ./dist --json                 # The CLI zips the directory
+curl -fsS -X POST "${DVIEW_URL%/}/upload" \
+  -H "Authorization: Bearer $DVIEW_TOKEN" \
+  -F "file=@./site.zip"                    # Or upload a zip directly
+```
+
+- The entry point is `index.html` at the root. If the zip holds a single top-level directory (for example, you zipped `dist/` itself), that level is removed.
+- The preview URL is `/v/<id>/`; pages and assets live at `/v/<id>/about.html`, `/v/<id>/assets/app.js`. Links inside the site must be **relative**: paths starting with `/` point at the server root and return 404. For Vite, set `base: './'`; other build tools have an equivalent setting.
+- Directory requests return their `index.html`. Missing files return the site's `404.html` if it has one. Use hash routing for single-page apps.
+- The CLI and Skill skip files and directories starting with `.` (such as `.env` and `.git`), `node_modules`, and symlinks when packing. The server also skips `__MACOSX` and rejects paths that escape the directory, symlinks, encrypted entries, path segments starting with `~`, and file types outside the allowlist: html, css, js, mjs, json, map, txt, md, xml, csv, tsv, webmanifest, common images, mp4/webm, mp3/wav/ogg/m4a, woff/woff2/ttf/otf/eot, wasm, glb/gltf/bin, and pdf.
+- Limits: the zip itself counts against `storage.max_size_mb`; a site may hold at most `storage.site_max_files` files (default 500) and `storage.site_max_unpacked_mb` MB once unpacked (default 50), measured on the bytes actually unpacked. Quotas use the unpacked size.
+- The upload response also includes `type: "site"`, `fileCount`, and `size` (unpacked bytes). The admin UI labels it as a site and shows the file count.
+
+**Access protection:** a visitor enters the access code once, on any page, and can then browse the whole site; after verification they return to the page they opened. Site pages run in a browser sandbox, where subrequests for styles, module scripts, and `fetch` carry no cookies. So after verification the visitor is redirected to a URL with a short-lived credential, `/v/<id>/~<credential>/...`, which relative links inside the site carry automatically. The credential is bound to the site and the current access-code version and expires with the preview grant (30 minutes by default). Resetting the code, changing its validity, or restarting the main service revokes it, and visitors must verify again. Because the credential is visible in the address bar, share the URL returned by the upload rather than the one in the browser.
 
 ### Categories, projects, and tags
 
@@ -222,7 +242,9 @@ See [config.example.yaml](../config.example.yaml) for the full configuration. Co
 | Field | Default / meaning |
 | --- | --- |
 | `server.port` / `server.base_url` | `3000` / public preview URL |
-| `storage.max_size_mb` | `50`, maximum size per file |
+| `storage.max_size_mb` | `50`, maximum size per uploaded file; for sites, the zip size |
+| `storage.site_max_files` / `site_max_unpacked_mb` | `500` / `50`, maximum files and unpacked size per site |
+| `storage.site_dir` | `./data/sites`, where sites are unpacked |
 | `storage.retention_days` | `0`; a positive value automatically deletes files older than that many days |
 | `tokens[].max_files` / `max_storage_mb` | No account quota when omitted |
 | `tokens[].retention_days` | Overrides global retention; `0` keeps files indefinitely |
@@ -283,7 +305,7 @@ If the port is occupied, change `RENDER_HOST_PORT` and the main service's `previ
 
 ### Browser behavior of HTML
 
-Upload only trusted content. Every HTML preview, including explicitly public ones, uses `sandbox allow-scripts` to isolate same-origin privileges, so page scripts cannot call admin APIs with an administrator's session. Scripts can run, but browser storage and same-origin requests are unavailable; pages relying on those features need adaptation. The Docker sidecar provides server-process isolation, which does not replace browser isolation.
+Upload only trusted content. Every HTML preview and multi-page site, including explicitly public ones, uses `sandbox allow-scripts` to isolate same-origin privileges, so page scripts cannot call admin APIs with an administrator's session. Scripts can run, but browser storage and same-origin requests are unavailable; pages relying on those features need adaptation. The Docker sidecar provides server-process isolation, which does not replace browser isolation.
 
 For `NET::ERR_CERT_DATE_INVALID`, check the validity of the certificate actually served to visitors. After renewal, install the certificate and reload the reverse proxy. The [Nginx certificate helper](../scripts/install-nginx-cert.sh) requires target paths matching your deployment and administrator sudo privileges.
 
@@ -291,7 +313,7 @@ For `NET::ERR_CERT_DATE_INVALID`, check the validity of the certificate actually
 
 | Method and path | Authentication | Purpose |
 | --- | --- | --- |
-| `POST /upload` | Bearer upload token | Upload a file; return its URL, access status, and new access code |
+| `POST /upload` | Bearer upload token | Upload a file or site zip; return its URL, access status, and new access code |
 | `GET /api/me` | Bearer upload token | Account information, usage, and quotas |
 | `GET /api/me/items` | Bearer upload token | List this account's resources |
 | `DELETE /api/me/items/:id` | Bearer upload token | Delete this account's resource |
@@ -300,6 +322,7 @@ For `NET::ERR_CERT_DATE_INVALID`, check the validity of the certificate actually
 | `GET /v/:id` | Public, or a verified preview cookie | Show the preview; show the code form when unauthorized |
 | `POST /v/:id/unlock` | Form field `code` | Verify a code and set a preview cookie |
 | `GET /v/:id/raw` | Same as the preview | Retrieve the original file; supports Range requests |
+| `GET /v/:id/<path>` | Public sites directly; protected sites via `/v/:id/~<credential>/<path>` | Pages and assets of a multi-page site; unverified pages show the access-code form |
 | `GET /admin/api/statistics` | Admin session | Summary, trends, calendar, breakdowns, and activity |
 | `GET /admin/api/statistics/day` | Admin session | Paginated upload events for one day |
 | `GET /admin/api/statistics/visits` | Admin session | Opens, access-code checks, top resources, per-project breakdown, and access-code status |

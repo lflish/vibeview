@@ -16,12 +16,17 @@ storage:
   html_dir: "./data/html"
   image_dir: "./data/images"
   video_dir: "./data/videos"
+  # 多页面站点（上传 zip）解压后的目录，每个站点一个 <id>/ 子目录
+  site_dir: "./data/sites"
   # 元数据存放目录，每条上传一个 <id>.json
   meta_dir: "./data/meta"
   # 0 = 永久保留；正数 = 超过该天数后永久删除（账户可单独覆盖）
   retention_days: 0
-  # 单文件大小上限（MB）
+  # 单个上传文件大小上限（MB）；站点按 zip 包大小算
   max_size_mb: 50
+  # 多页面站点：最多文件数、解压后总大小上限（MB）
+  site_max_files: 500
+  site_max_unpacked_mb: 50
 
 # 访问码过期只限制访问，不删除文件；与 storage.retention_days 分开。
 access:
