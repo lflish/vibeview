@@ -1,6 +1,6 @@
 # vibeview user guide
 
-[← README.en.md](../README.en.md) · [简体中文](user-guide.zh-CN.md)
+[← README](../README.md) · [简体中文](user-guide.zh-CN.md)
 
 The service is named **vibeview**; its CLI is **`dview`**. Supported formats include HTML, PNG / JPG / GIF / WebP / SVG and other images, and MP4 / WebM videos. HTML descriptions use the uploaded `description` first, then fall back to `<meta name="description">`, `<title>`, or a heading. The default per-file limit is 50 MB, with indefinite retention.
 

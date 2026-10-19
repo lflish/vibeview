@@ -2,101 +2,101 @@
   <img src="docs/assets/banner.svg" alt="vibeview — Local files. Shareable previews." width="100%">
 </p>
 
-<h1 align="center">让本地文件，成为可分享的预览。</h1>
+<h1 align="center">Local files. Shareable previews.</h1>
 
 <p align="center">
-  一个轻量的自托管预览服务。<br>
-  把 AI 报告、HTML 图表、截图和演示视频，变成浏览器里可打开、可保护、可管理的链接。
+  A lightweight, self-hosted preview service.<br>
+  Turn AI reports, HTML charts, screenshots, and demo videos into browser links you can protect and manage.
 </p>
 
 <p align="center">
   <a href="https://github.com/lflish/vibeview/actions/workflows/ci.yml"><img src="https://github.com/lflish/vibeview/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22-43853d?style=flat-square&amp;logo=nodedotjs&amp;logoColor=white" alt="Node.js 22"></a>
-  <a href="docs/user-guide.zh-CN.md#部署"><img src="https://img.shields.io/badge/deploy-self--hosted-2563eb?style=flat-square" alt="Self-hosted"></a>
-  <a href="#访问保护与文件保留"><img src="https://img.shields.io/badge/access-code%20protected-2563eb?style=flat-square" alt="Access-code protected"></a>
+  <a href="docs/user-guide.en.md#deployment"><img src="https://img.shields.io/badge/deploy-self--hosted-2563eb?style=flat-square" alt="Self-hosted"></a>
+  <a href="#access-protection-and-retention"><img src="https://img.shields.io/badge/access-code%20protected-2563eb?style=flat-square" alt="Access-code protected"></a>
 </p>
 
 <p align="center">
-  <strong>简体中文</strong> · <a href="README.en.md">English</a>
+  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
 <p align="center">
-  <a href="#界面预览">界面预览</a> ·
-  <a href="#快速开始">快速开始</a> ·
-  <a href="#上传与分享">上传与分享</a> ·
-  <a href="docs/user-guide.zh-CN.md">使用指南</a> ·
-  <a href="https://github.com/lflish/vibeview/issues">反馈问题</a>
+  <a href="#screenshots">Screenshots</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#upload-and-share">Upload &amp; share</a> ·
+  <a href="docs/user-guide.en.md">User guide</a> ·
+  <a href="https://github.com/lflish/vibeview/issues">Report an issue</a>
 </p>
 
 ---
 
-## 为什么用 vibeview
+## Why vibeview
 
-生成文件之后，分享和整理也应该简单。vibeview 把这两件事放在一起：用 `dview` 上传，用链接分享，再在一个管理页面里找到它们。文件保存在自己的服务器上，个人使用只需配置一个上传 token。
+Sharing and organizing a file should be as easy as generating it. Upload with `dview`, share the link, and find it later in one admin page. Files stay on your own server; personal use needs just one upload token.
 
-| 上传，即可预览 | 分享，自带保护 |
+| Upload and preview | Share with access protection |
 | :--- | :--- |
-| HTML、图片和视频使用同一套上传流程。适合 AI 生成的报告、可视化图表、页面原型和短视频。 | 新文件默认生成随机访问码，有效期可调整。支持重置、不过期或显式公开，原文件也受保护。 |
-| **文件多了，也找得到** | **接入你已有的工具** |
-| 简介、来源、创建时间和持续时长一目了然；页面按分类、项目、agent 和标签整理，搜索、筛选、排序、分页和批量删除帮助管理。 | CLI、curl、AI Skill 和 CI 都能上传。管理页支持浅色、深色和跟随系统，首次默认浅色。 |
-| **知道谁在看** | **按项目归档** |
-| 每个链接的打开次数和最后打开时间、访问码验证成功与失败、过期链接被访问，一眼看出哪些分享有人看、哪些可以清理。只保存每日计数，不记录 IP。 | 上传时自动记录 git 仓库名作为项目。资源管理用项目导航像目录一样切换，统计也能按项目查看上传和打开。 |
+| One upload workflow for HTML, images, and video. Built for AI reports, visualizations, page prototypes, and short demos. | Random access codes by default, with adjustable expiration, reset, no expiration, or explicit public access. Original files are protected too. |
+| **Find it as your library grows** | **Use your existing tools** |
+| Descriptions, sources, creation dates, and age at a glance. Organize pages by category, project, agent, and tag; search, filter, sort, paginate, and delete in bulk. | Upload through the CLI, curl, AI Skills, or CI. Admin pages support light, dark, and system themes, starting with light. |
+| **Know who is looking** | **Organize by project** |
+| Opens and last-opened time for every link, successful and failed access-code checks, and visits to expired links show which shares are used and which can be cleaned up. Only daily counts are stored; no IPs. | Uploads record the git repository name as their project. Switch projects like folders in resource management, and view uploads and opens per project in statistics. |
 
-**默认值：** 单文件 **50 MB** · 访问码 **7 天** · 文件**永久保留** · 账户配额**可选**。
+**Defaults:** **50 MB** per file · **7-day** access codes · **Indefinite** file retention · **Optional** account quotas.
 
-## 界面预览
+## Screenshots
 
-### 上传后的页面效果
+### An uploaded page in action
 
-[![vibeview 实际 HTML 预览：浅色报告、指标卡片与可切换时间范围的图表](docs/assets/preview-demo.png)](https://view.lflish.fun/v/xE7Gp8xUszMtVoph)
+[![An actual vibeview HTML preview with a light report, metric cards, and an interactive chart](docs/assets/preview-demo.png)](https://view.lflish.fun/v/xE7Gp8xUszMtVoph)
 
-[打开交互演示](https://view.lflish.fun/v/xE7Gp8xUszMtVoph) · **访问码：** `6kTR93sX9KaN` · **有效期：** 不过期 · [HTML 源文件](examples/preview-demo.html)
+[Open the interactive demo](https://view.lflish.fun/v/xE7Gp8xUszMtVoph) · **Access code:** `6kTR93sX9KaN` · **Expiration:** None · [HTML source](examples/preview-demo.html)
 
-这是一份通过 vibeview 上传并预览的单文件 HTML 报告，使用虚构数据。打开后可以切换 **7 days / 30 days**，体验页面交互；截图取自实际线上预览。演示专门设置了不过期访问码，普通上传仍默认有效期 7 天。
+This standalone HTML report was uploaded to vibeview and uses fictional data. Switch between **7 days / 30 days** to try the interaction. The screenshot comes from the deployed preview. The demo's code is specifically configured without expiration; ordinary uploads still default to 7 days.
 
-也可以把仓库中的示例上传到自己的服务：
+Upload the included example to your own service:
 
 ```bash
 bash bin/dview upload examples/preview-demo.html --json
 ```
 
-### 管理端
+### Admin interface
 
-管理端提供资源管理和[管理统计](docs/user-guide.zh-CN.md#管理统计)：
+The admin interface includes resource management and [admin statistics](docs/user-guide.en.md#admin-statistics):
 
-- **资源管理**：项目导航、「打开」列，以及「从未打开 / 30 天未打开 / 7 天内打开过」筛选，按打开次数排序后可直接批量清理。
-- **上传统计**：今日上传、每日趋势、上传日历，按项目、来源和类型分布。删除文件会减少当前存量，历史上传记录继续保留；上线前的数据仅能回填仍存在的文件。
-- **[访问统计](docs/user-guide.zh-CN.md#访问统计)**：每日打开次数、访问码验证漏斗、打开最多的资源和访问码状态。管理员自己的预览和链接预览爬虫单独计数，不计入打开次数。
+- **Resource management**: a project bar, an opens column, and filters for never opened / not opened in 30 days / opened in the last 7 days. Sort by opens and clean up in bulk.
+- **Upload statistics**: today's uploads, daily trends, a calendar, and breakdowns by project, source, and type. Deleting a file reduces current inventory while preserving upload history. Historical backfill covers surviving files only.
+- **[Access statistics](docs/user-guide.en.md#access-statistics)**: daily opens, an access-code funnel, the most opened resources, and access-code status. Administrator previews and link-preview crawlers are counted separately from opens.
 
-![vibeview 浅色管理界面：项目导航，资源按分类、项目、agent 与标签整理，显示访问码、打开次数、来源和上传时间](docs/assets/admin-light.png)
+![vibeview light admin UI with a project bar, resources organized by category, project, agent, and tag, plus access codes, opens, sources, and upload times](docs/assets/admin-light.png)
 
-<p align="center"><sub>实际管理界面，使用隔离的演示数据截图；截图中的名称与资源仅作示例。</sub></p>
+<p align="center"><sub>Actual admin UI, captured with isolated sample data. The interface is currently in Chinese.</sub></p>
 
 <details>
-<summary><strong>查看访问统计</strong> — 每日打开次数、访问码验证、打开最多与访问码状态</summary>
+<summary><strong>Access statistics</strong> — Daily opens, access-code checks, most opened resources, and code status</summary>
 
-![统计总览的访问情况：期间打开、验证成功率、从未打开、打开过期链接，每日打开趋势、访问码验证漏斗、打开最多的资源与访问码状态](docs/assets/statistics-visits.png)
+![The access section of the statistics page: opens, unlock success rate, never opened, expired-link visits, daily opens, access-code funnel, most opened resources, and access-code status](docs/assets/statistics-visits.png)
 
-<p align="center"><sub>统计总览的「访问情况」板块，使用隔离的演示数据截图。</sub></p>
+<p align="center"><sub>The access section of the statistics page, captured with isolated sample data.</sub></p>
 
 </details>
 
 <details>
-<summary><strong>查看访问保护设置</strong> — 调整有效期、重置访问码、开放公开访问</summary>
+<summary><strong>Access protection settings</strong> — Set expiration, reset a code, or allow public access</summary>
 
 <p align="center">
-  <img src="docs/assets/access-settings.png" alt="访问保护设置：验证方式、有效期与访问码重置" width="460">
+  <img src="docs/assets/access-settings.png" alt="Access settings: verification mode, expiration, and code reset" width="460">
 </p>
 
-访问码到期只限制访问，文件继续保留。管理端可随时查看访问码，并一键复制「链接 + 访问码 + 有效期」；升级前生成的访问码无法查看，重置一次即可。
+Code expiration blocks access while keeping the file. Admins can view a code at any time and copy the link, code, and expiration in one click; codes created before this feature cannot be viewed until reset once.
 
 </details>
 
-## 快速开始
+## Quick start
 
-需要 **Node.js 22** 和 npm。上传 CLI 需要 Bash、curl，以及 Python 3 或 Node.js。本地运行主服务即可使用；Docker 用于可选的 render sidecar。
+Use **Node.js 22** and npm. The upload CLI needs Bash, curl, and either Python 3 or Node.js. Run the main service locally; Docker is used for the optional render sidecar.
 
-**1. 安装**
+**1. Install**
 
 ```bash
 git clone https://github.com/lflish/vibeview.git
@@ -105,30 +105,30 @@ npm ci
 cp config.example.yaml config.yaml
 ```
 
-**2. 配置**
+**2. Configure**
 
-编辑 `config.yaml`：设置 `tokens[].token`、`admin.password` 和 `admin.session_secret`，为每项使用自己的随机值，例如分别运行 `openssl rand -hex 24`。`tokens[].name` 是上传来源名；本地 `server.base_url` 保持 `http://localhost:3000`。
+Edit `config.yaml`: set `tokens[].token`, `admin.password`, and `admin.session_secret` to your own random values, for example by running `openssl rand -hex 24` separately for each. `tokens[].name` identifies the upload source. Keep `server.base_url` at `http://localhost:3000` for local use.
 
-**3. 启动**
+**3. Start**
 
 ```bash
 npm start
 ```
 
-打开 [http://localhost:3000/admin](http://localhost:3000/admin)，使用配置中的管理员账号登录。完整配置和健康检查见 [使用指南](docs/user-guide.zh-CN.md#快速开始)。
+Open [http://localhost:3000/admin](http://localhost:3000/admin) and sign in with your configured administrator credentials. See the [user guide](docs/user-guide.en.md#quick-start) for full configuration and health checks.
 
-## 上传与分享
+## Upload and share
 
-在另一个终端中：
+In another terminal:
 
 ```bash
 export DVIEW_URL="http://localhost:3000"
-export DVIEW_TOKEN="你的上传 token"
+export DVIEW_TOKEN="your-upload-token"
 
 bash bin/dview upload ./report.html --json
 ```
 
-响应包含预览链接、访问码和到期时间：
+The response includes a preview link, access code, and expiration time:
 
 ```json
 {
@@ -138,59 +138,59 @@ bash bin/dview upload ./report.html --json
 }
 ```
 
-*上面仅展示部分响应字段；访问码与时间以实际返回为准。*
+*Selected response fields only. Actual codes and timestamps come from the upload response.*
 
-打开链接、输入访问码，即可预览。AI 和脚本应保存 `url`、`accessCode`、`access.expiresAt` 三个字段；访问码不要放进链接或生成的 HTML 中。
+Open the link and enter the access code to view the file. AI tools and scripts should save `url`, `accessCode`, and `access.expiresAt`. Keep the code out of URLs and generated HTML.
 
-执行 `npm link` 后，可以直接使用 `dview`（也可写作 `vibeview`）：
+Run `npm link` to use `dview` (or its alias `vibeview`) directly:
 
 ```bash
-dview upload ./report.html --json --access-days 1 # 访问码有效期 1 天
-dview upload ./public.html --public               # 显式设为公开
-dview upload ./snake.html --json --category game --tag h5   # 记录页面分类与标签
-dview list                                       # 查看本账户资源
-dview list --category report                     # 按分类 / 项目 / 标签筛选
-dview edit Ab3xK9mP2qR7sT1v --category doc         # 上传后修改分类
-dview me                                         # 查看用量
-dview delete Ab3xK9mP2qR7sT1v                      # 删除本账户资源
+dview upload ./report.html --json --access-days 1 # Code valid for 1 day
+dview upload ./public.html --public               # Explicitly public
+dview upload ./snake.html --json --category game --tag h5   # Record category and tags
+dview list                                       # Your resources
+dview list --category report                     # Filter by category / project / tag
+dview edit Ab3xK9mP2qR7sT1v --category doc         # Reclassify after upload
+dview me                                         # Your usage
+dview delete Ab3xK9mP2qR7sT1v                      # Delete your resource
 ```
 
-**AI 接入：** [Claude Code 安装](docs/user-guide.zh-CN.md#ai-skill-与工具接入) · [Codex / Cursor / Agent](AGENTS.md) · [上传 Skill](skill/dview-upload/SKILL.md) · [curl 与 CI](docs/user-guide.zh-CN.md#上传与分享)。生成页面默认使用浅色风格。
+**AI integrations:** [Claude Code setup](docs/user-guide.en.md#ai-skills-and-integrations) · [Codex / Cursor / Agents](AGENTS.md) · [Upload Skill](skill/dview-upload/SKILL.md) · [curl and CI](docs/user-guide.en.md#upload-and-share). Generated pages use a light theme by default.
 
-## 访问保护与文件保留
+## Access protection and retention
 
-| 你想控制什么 | 使用什么 |
+| What you want to control | What to use |
 | :--- | :--- |
-| 谁能上传、管理本账户文件 | 上传 token |
-| 谁能打开某个预览及原文件 | 页面访问码，默认有效期 7 天 |
-| 文件什么时候被自动删除 | `storage.retention_days`，默认 `0`，永久保留 |
+| Who can upload and manage an account's files | Upload token |
+| Who can view a preview and its original file | Per-preview access code, valid for 7 days by default |
+| When files are automatically deleted | `storage.retention_days`, default `0` for indefinite retention |
 
-访问码过期**不会删除文件**。历史页面默认也加锁，在管理端生成访问码后分享。默认每个页面 10 分钟内最多失败 10 次，超限返回 `429`；限制跨 IP 累计并在重启后保留。
+An expired code **does not delete the file**. Older previews are also locked by default; generate a code in the admin UI before sharing. By default, each preview allows 10 failed attempts per 10 minutes, then returns `429`. The limit is shared across IPs and persists through restarts.
 
-更多行为见 [访问保护与文件保留](docs/user-guide.zh-CN.md#访问保护与文件保留)。
+Read more about [access protection and retention](docs/user-guide.en.md#access-protection-and-retention).
 
-管理端登录有独立的防暴力破解限制：默认同一客户端 10 分钟内最多失败 10 次，全站共享上限为 100 次，超限返回 `429` 与 `Retry-After`。计数持久化，换账号、伪造 IP 请求头或重启不能清空限制；冷却结束后恢复。详见 [管理端登录保护](docs/user-guide.zh-CN.md#管理端登录保护)。
+Administrator login has separate brute-force protection: by default, 10 failed attempts per client per 10 minutes, plus a shared cap of 100 failures. Exceeding either limit returns `429` and `Retry-After`. Counters persist through restarts. See [admin login protection](docs/user-guide.en.md#admin-login-protection).
 
-## 部署
+## Deployment
 
-主服务使用 Node.js，可由 PM2 或 systemd 守护；公网部署配置 HTTPS 和实际的 `server.base_url`。`npm run backup` 把全部数据打成一个备份包，可配合 systemd 定时器每天自动执行。可选 Docker render sidecar 只读挂载文件，通过主服务的认证代理提供预览。
+Run the Node.js main service under PM2 or systemd. Public deployments need HTTPS and the actual `server.base_url`. `npm run backup` packs all data into one archive; a systemd timer can run it daily. The optional Docker render sidecar mounts files read-only and serves previews through the main service's authenticated proxy.
 
-[部署步骤与 gateway 密钥](docs/user-guide.zh-CN.md#部署) · [Sidecar 设计](docs/design-render-sidecar.md) · [本项目 TX 发布 Skill](.agents/skills/deploy-tx/SKILL.md)
+[Deployment and gateway setup](docs/user-guide.en.md#deployment) · [Sidecar design](docs/design-render-sidecar.md) · [This project's TX deployment Skill](.agents/skills/deploy-tx/SKILL.md)
 
 <a id="api"></a>
 
-## 文档与参与
+## Documentation and contributing
 
-| 文档 | 内容 |
+| Document | Contents |
 | :--- | :--- |
-| [中文使用指南](docs/user-guide.zh-CN.md) · [English guide](docs/user-guide.en.md) | 完整安装、CLI、curl、页面管理、配置与部署 |
-| [配置示例](config.example.yaml) | 访问保护、文件保留、账户配额、Sidecar 配置 |
-| [API](docs/user-guide.zh-CN.md#api) | 上传、自助管理、管理员接口与访问验证 |
-| [开发与测试](docs/user-guide.zh-CN.md#开发与测试) | 本地验证命令、浏览器测试与目录结构 |
-| [Agent 使用说明](AGENTS.md) · [上传 Skill](skill/dview-upload/SKILL.md) | AI 生成和上传文件的约定 |
+| [English user guide](docs/user-guide.en.md) · [中文使用指南](docs/user-guide.zh-CN.md) | Full setup, CLI, curl, resource management, configuration, and deployment |
+| [Example configuration](config.example.yaml) | Access protection, retention, account quotas, and sidecar settings |
+| [API](docs/user-guide.en.md#api) | Uploads, account resources, administrator endpoints, and preview verification |
+| [Development and tests](docs/user-guide.en.md#development-and-tests) | Local checks, browser tests, and repository layout |
+| [Agent instructions](AGENTS.md) · [Upload Skill](skill/dview-upload/SKILL.md) | Conventions for generating and uploading files with AI |
 
-当前适合单管理员、单个主服务进程和本地文件存储。受保护 HTML 使用浏览器 sandbox；依赖浏览器存储或同源请求的页面需要适配，详见 [浏览器行为](docs/user-guide.zh-CN.md#html-的浏览器行为)。
+The current scope is one administrator, one main-service process, and local file storage. Protected HTML uses a browser sandbox; pages that depend on browser storage or same-origin requests need adaptation. See [browser behavior](docs/user-guide.en.md#browser-behavior-of-html).
 
-欢迎 [报告问题](https://github.com/lflish/vibeview/issues) 或 [贡献代码](https://github.com/lflish/vibeview/pulls)。反馈时附上运行环境、复现步骤和脱敏日志；修改默认行为时同步维护中英文文档、配置示例和相关测试。
+[Report an issue](https://github.com/lflish/vibeview/issues) or [contribute code](https://github.com/lflish/vibeview/pulls). Include your runtime environment, reproduction steps, and sanitized logs. Keep both language versions, configuration examples, and relevant tests in sync when changing defaults.
 
-推送到 `main` 和每个 Pull Request 都会通过 [GitHub Actions](https://github.com/lflish/vibeview/actions/workflows/ci.yml) 自动运行单元、集成、冒烟和浏览器测试；本地可用 `npm test` 与 `npm run test:browser` 复现。部署仍按需手动执行，不会自动发布到服务器。
+Every push to `main` and every pull request runs unit, integration, smoke, and browser tests through [GitHub Actions](https://github.com/lflish/vibeview/actions/workflows/ci.yml). Reproduce locally with `npm test` and `npm run test:browser`. Deployment stays manual; CI never deploys to a server.
