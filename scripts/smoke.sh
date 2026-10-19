@@ -97,6 +97,7 @@ PY
 cat >"$TMP/config.yaml" <<YAML
 server:
   port: ${PORT}
+  host: "127.0.0.1"
   base_url: "${BASE}"
 
 storage:

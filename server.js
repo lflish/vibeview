@@ -638,9 +638,9 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
     process.exit(0);
   });
 }
-app.listen(config.port, () => {
+app.listen(config.port, config.host, () => {
   const mode = config.preview.proxyToRender
     ? `preview→${config.preview.renderUrl}`
     : 'preview=local';
-  console.log(`[vibeview] 已启动 → ${config.baseUrl} (端口 ${config.port}, ${mode})`);
+  console.log(`[vibeview] 已启动 → ${config.baseUrl} (${config.host || '*'}:${config.port}, ${mode})`);
 });
