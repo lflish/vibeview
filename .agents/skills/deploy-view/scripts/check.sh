@@ -58,10 +58,16 @@ exit "$failed"
 REMOTE
 
 # Validate the public certificate from the caller, independently of loopback.
-if curl --connect-timeout 10 --max-time 20 -fsS -o /dev/null "$VIEW_PUBLIC_URL/admin/login"; then
+# 重试几次以免网络抖动误判。退出码：0 全部通过，1 目标机检查失败，3 只有公网检查失败。
+public_ok=0
+for attempt in 1 2 3; do
+  if curl --connect-timeout 10 --max-time 20 -fsS -o /dev/null "$VIEW_PUBLIC_URL/admin/login"; then public_ok=1; break; fi
+  ((attempt < 3)) && sleep 5
+done
+if ((public_ok)); then
   echo 'PASS public HTTPS /admin/login (certificate verified)'
 else
-  echo 'FAIL public HTTPS /admin/login (certificate verification enabled)' >&2
-  result=1
+  echo 'FAIL public HTTPS /admin/login (certificate verification enabled, 3 attempts)' >&2
+  ((result == 0)) && result=3
 fi
 exit "$result"

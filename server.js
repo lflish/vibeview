@@ -46,6 +46,20 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', config.trustProxy);
 
+// HTTPS 访问时开启 HSTS，避免之后再经明文 http 访问；管理端禁止被嵌入其他页面。
+app.use((req, res, next) => {
+  if (req.secure) res.set('Strict-Transport-Security', 'max-age=31536000');
+  if (req.path === '/admin' || req.path.startsWith('/admin/')) {
+    res.set({
+      'X-Frame-Options': 'DENY',
+      'Content-Security-Policy': "frame-ancestors 'none'",
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'same-origin',
+    });
+  }
+  next();
+});
+
 // 确保存储目录存在
 for (const d of [
   config.storage.htmlDir,
@@ -313,7 +327,8 @@ app.use(
     secret: config.admin.sessionSecret,
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, sameSite: 'lax', maxAge: 12 * 60 * 60 * 1000 },
+    // 'auto'：经 HTTPS（含反向代理转发的 X-Forwarded-Proto）登录时带 Secure，浏览器不会再经 http 发送。
+    cookie: { httpOnly: true, sameSite: 'lax', secure: 'auto', maxAge: 12 * 60 * 60 * 1000 },
   })
 );
 app.use(express.urlencoded({ extended: false }));

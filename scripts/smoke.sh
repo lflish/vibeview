@@ -303,6 +303,23 @@ curl -s -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
 CODE="$(curl -s -b "$COOKIE_JAR" -o "$TMP/alist.json" -w '%{http_code}' "$BASE/admin/api/list")"
 assert_eq "$CODE" "200" "admin list with session"
 
+# 明文 http 登录不加 Secure；经 HTTPS 代理（X-Forwarded-Proto）登录时 cookie 带 Secure，并返回 HSTS
+if grep -qi '^set-cookie:.*; *secure' "$TMP/login.hdr"; then fail "plain http login cookie should not be Secure"; else ok "plain http login cookie not Secure"; fi
+curl -s -X POST -H 'X-Forwarded-Proto: https' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data-urlencode "user=${ADMIN_USER}" \
+  --data-urlencode "password=${ADMIN_PASS}" \
+  -D "$TMP/login-https.hdr" -o /dev/null "$BASE/admin/login"
+if grep -qi '^set-cookie: *connect\.sid=.*; *secure' "$TMP/login-https.hdr"; then ok "https login cookie is Secure"; else fail "https login cookie missing Secure"; fi
+if grep -qi '^strict-transport-security: *max-age=' "$TMP/login-https.hdr"; then ok "https response sends HSTS"; else fail "https response missing HSTS"; fi
+curl -s -D "$TMP/admin-page.hdr" -o /dev/null "$BASE/admin/login"
+if grep -qi '^x-frame-options: *deny' "$TMP/admin-page.hdr" && grep -qi "^content-security-policy:.*frame-ancestors 'none'" "$TMP/admin-page.hdr"; then
+  ok "admin pages refuse framing"
+else
+  fail "admin pages missing anti-framing headers"
+fi
+if grep -qi '^strict-transport-security' "$TMP/admin-page.hdr"; then fail "plain http should not send HSTS"; else ok "plain http has no HSTS"; fi
+
 CODE="$(curl -s -b "$COOKIE_JAR" -o "$TMP/apage.json" -w '%{http_code}' \
   "$BASE/admin/api/list?page=1&pageSize=1&q=${MARKER}&sort=time&order=desc")"
 assert_eq "$CODE" "200" "admin list server-side search + pagination"

@@ -38,7 +38,7 @@ description: 把 vibeview 的某个版本部署到线上（本机或 SSH 服务�
 2. 执行只读检查 `bash .agents/skills/deploy-view/scripts/check.sh`，它会显示目标机当前部署的版本（`RELEASE` 记录）。区分原有故障和新回归；连接或磁盘有问题时停止。
 3. 部署正式版本时，它的 CI 已经在发版时通过，不必重跑全部测试。部署 `--commit` / `--worktree` 时，先在本地跑 `SMOKE_SKIP_RENDER=1 npm test`，相关改动再跑 `npm run test:access`、`npm run test:browser` 或 `npm run smoke:render`；跑不了的明确记录。
 4. 涉及统计功能时先读 [统计发布验证](references/statistics.md)。
-5. 预演：`bash .agents/skills/deploy-view/scripts/deploy.sh <版本>`，把版本变化和文件变更告诉用户。然后加 `--yes` 执行。脚本会备份、同步、按需 `npm ci` / 重建 sidecar、重启、写 `RELEASE` 并检查；失败自动回滚。
+5. 预演：`bash .agents/skills/deploy-view/scripts/deploy.sh <版本>`，把版本变化和文件变更告诉用户。然后加 `--yes` 执行。脚本会备份、同步、按需 `npm ci` / 重建 sidecar、重启、写 `RELEASE` 并检查；目标机检查失败自动回滚。只有公网 HTTPS 失败（重试 3 次）时不回滚，脚本以退出码 3 告警，需排查网络、DNS、nginx 或证书。
 6. 对本次功能做实际验证；页面修改还应检查服务返回的内容，不能只看磁盘文件。需要手动回滚时用 `scripts/rollback.sh <release_id>`。不要对失败的部署无限重试；同一原因一次修复仍失败时保留证据并报告阻塞。
 
 ## 验证与报告

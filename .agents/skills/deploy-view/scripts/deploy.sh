@@ -158,5 +158,10 @@ printf 'version=%s\ncommit=%s\nsource=%s\nsha256=%s\ndeployed_at=%s\nrelease_id=
 echo "主服务已重启"
 EOF
 
-bash "$here/check.sh" || rollback "上线检查失败"
-say "完成：$label 已部署（备份 $VIEW_RELEASES_DIR/$VIEW_RELEASE_ID）"
+# 目标机本地检查失败才回滚；只有公网 HTTPS 失败时多半是网络或代理问题，回滚代码无济于事，只告警。
+rc=0; bash "$here/check.sh" || rc=$?
+case "$rc" in
+  0) say "完成：$label 已部署（备份 $VIEW_RELEASES_DIR/$VIEW_RELEASE_ID）" ;;
+  3) say "WARN $label 已部署，目标机检查全部通过，但公网 HTTPS 访问失败；请检查网络、DNS、nginx 或证书（未回滚，备份 $VIEW_RELEASES_DIR/$VIEW_RELEASE_ID）"; exit 3 ;;
+  *) rollback "上线检查失败" ;;
+esac
