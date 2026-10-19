@@ -158,7 +158,10 @@ async function scenario(proxy) {
   fs.writeFileSync(legacyPath, JSON.stringify(sealedMeta));
   assert.equal((await unlock(legacyCode, base + '/v/' + legacy)).status, 303);
   const publicItem = await upload('text/html', 'public.html', 'PUBLIC', { access_mode: 'public' });
-  assert.equal(publicItem.accessCode, undefined); assert.equal((await request(base + '/v/' + publicItem.id)).status, 200);
+  assert.equal(publicItem.accessCode, undefined);
+  const publicPage = await request(base + '/v/' + publicItem.id);
+  assert.equal(publicPage.status, 200);
+  assert.match(publicPage.headers.get('content-security-policy') || '', /sandbox allow-scripts/, 'public HTML is sandboxed too');
   assert.equal((await reveal(publicItem.id)).status, 409);
   const badForm = new FormData(); badForm.append('file', new Blob(['bad']), 'bad.html'); badForm.append('access_days', 'NaN');
   assert.equal((await request(base + '/upload', { method: 'POST', headers: { Authorization: 'Bearer owner-token' }, body: badForm })).status, 400);
@@ -238,8 +241,13 @@ async function browserChecks(base, browserBase, admin) {
     await context.addCookies([{ name: parts[0], value: parts.slice(1).join('='), url: browserBase + '/v/' + item.id, httpOnly: true }]);
     await page.goto(browserBase + '/v/' + item.id);
     assert.equal(await page.evaluate(() => window.probe), 'blocked');
+    // Public HTML gets the same isolation; it has no access code to protect it otherwise.
+    const publicForm = new FormData(); publicForm.append('file', new Blob([attackFile], { type: 'text/html' }), 'public-sandbox.html'); publicForm.append('access_mode', 'public');
+    const publicUpload = await (await request(base + '/upload', { method: 'POST', headers: { Authorization: 'Bearer owner-token' }, body: publicForm })).json();
+    await page.goto(browserBase + '/v/' + publicUpload.id);
+    assert.equal(await page.evaluate(() => window.probe), 'blocked', 'public HTML cannot read admin APIs');
     assert.deepEqual(errors, []);
-    console.log('access browser: HTTPS reverse proxy, form origin/retry/redirect, secure grant, admin controls, opaque HTML isolation passed');
+    console.log('access browser: HTTPS reverse proxy, form origin/retry/redirect, secure grant, admin controls, opaque HTML isolation (protected and public) passed');
   } finally { await browser.close(); }
 }
 async function missingGateway() {
