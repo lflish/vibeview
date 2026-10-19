@@ -15,7 +15,7 @@ allowed-tools: Bash, Write, Read
 先确认 vibeview 上传所需的环境变量已就绪:
 
 ```bash
-echo "DVIEW_URL=${DVIEW_URL:-<未设置>}"; echo "DVIEW_TOKEN=${DVIEW_TOKEN:+<已设置>}"
+printf 'DVIEW_URL=%s\nDVIEW_TOKEN=%s\n' "${DVIEW_URL:-<未设置>}" "${DVIEW_TOKEN:+<已设置>}"
 ```
 
 - 如果 `DVIEW_URL` 或 `DVIEW_TOKEN` 为空,**立即停止**,提示用户:
@@ -50,23 +50,25 @@ echo "DVIEW_URL=${DVIEW_URL:-<未设置>}"; echo "DVIEW_TOKEN=${DVIEW_TOKEN:+<�
 
 ## 步骤 4:上传并返回链接
 
-`<路径>` 是简单模式的 HTML 文件,或站点模式的目录。按顺序探测上传方式(用第一个可用的):
+先按页面用途选一个分类 `CATEGORY`:`doc` 开发文档 / `report` 报告 / `dashboard` 图表看板 / `prototype` 原型 / `game` 游戏 / `slides` 幻灯片 / `tool` 小工具 / `demo` 演示 / `other`。再选 1–3 个小写标签 `TAGS`(逗号分隔)。
+
+`TARGET` 是简单模式的 HTML 文件,或站点模式的目录。按顺序探测上传方式(用第一个可用的):
 
 ```bash
 TARGET="<刚生成的文件或目录>"
+CATEGORY="<分类>"
+TAGS="<标签1,标签2>"
 if command -v dview >/dev/null 2>&1; then
-  dview upload "$TARGET" --json
+  dview upload "$TARGET" --json --category "$CATEGORY" --tag "$TAGS"
 elif [ -x bin/dview ]; then
-  bash bin/dview upload "$TARGET" --json
+  bash bin/dview upload "$TARGET" --json --category "$CATEGORY" --tag "$TAGS"
 else
   UP="skill/dview-upload/upload.sh"; [ -f "$UP" ] || UP="$HOME/.claude/skills/dview-upload/upload.sh"
-  bash "$UP" "$TARGET" --json
+  bash "$UP" "$TARGET" --json --category "$CATEGORY" --tag "$TAGS"
 fi
 ```
 
-上传时按 `dview-upload` Skill 的规则加 `--category` 和 1–3 个 `--tag`。
-
-- 从 JSON 读取 `url`、`accessCode`、`access.expiresAt`,把链接、访问码和到期时间告诉用户,并提醒链接和访问码分开分享。站点模式还要说明这是多页面站点、共有几个文件(`fileCount`),一个访问码覆盖所有页面。
+- 从 JSON 读取 `url`、`accessCode`、`access.expiresAt`,把链接、访问码和到期时间告诉用户,并提醒链接和访问码分开分享。只有用户明确要求免验证码时才加 `--public`。站点模式还要说明这是多页面站点、共有几个文件(`fileCount`),一个访问码覆盖所有页面。
 - 若全部上传方式都不存在,提示用户先运行 `install-skill.sh`(或 `npm link`)安装 CLI / Skill。
 - 若上传失败(非零退出),把错误输出转述给用户,并保留已生成的本地路径供其手动处理。站点被拒绝时(如缺少 `index.html`、文件类型不支持、超过文件数或大小上限),按错误信息修正后重试一次。
 
