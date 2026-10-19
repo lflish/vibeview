@@ -1,4 +1,0 @@
-interface:
-  display_name: "发布到 TX"
-  short_description: "将 vibeview 发布到 TX，完成代码备份、Sidecar 更新与上线验证"
-  default_prompt: "使用 $deploy-tx 将当前 vibeview 项目发布到 TX，并验证主服务、Docker sidecar 和公网访问。"

@@ -1,10 +1,12 @@
 # Agent notes — vibeview
 
-## TX deployment skill
+## Deployment skill
 
-For publishing this project to TX or checking its deployment, read
-[deploy-tx](.agents/skills/deploy-tx/SKILL.md). Example: “使用 $deploy-tx 发布当前项目到 TX 并验证”。
+For publishing this project or checking its deployment, read
+[deploy-view](.agents/skills/deploy-view/SKILL.md). Example: “使用 $deploy-view 发布当前项目并验证”。
 The skill includes a read-only check and the backup, sync, sidecar, restart, and rollback workflow.
+The deployment target (host, directory, public URL) comes from `VIEW_*` environment variables or the
+untracked `.agents/skills/deploy-view/local.env`; never commit real hosts, IPs, or usernames.
 
 When you generate HTML, charts, screenshots, images, or short videos that the user should open in a browser, **upload them to vibeview** and return the preview URL instead of only leaving a local path.
 

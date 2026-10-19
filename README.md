@@ -175,7 +175,7 @@ Administrator login has separate brute-force protection: by default, 10 failed a
 
 Run the Node.js main service under PM2 or systemd. Public deployments need HTTPS and the actual `server.base_url`. `npm run backup` packs all data into one archive; a systemd timer can run it daily. The optional Docker render sidecar mounts files read-only and serves previews through the main service's authenticated proxy.
 
-[Deployment and gateway setup](docs/user-guide.en.md#deployment) · [Sidecar design](docs/design-render-sidecar.md) · [This project's TX deployment Skill](.agents/skills/deploy-tx/SKILL.md)
+[Deployment and gateway setup](docs/user-guide.en.md#deployment) · [Sidecar design](docs/design-render-sidecar.md) · [Deployment Skill](.agents/skills/deploy-view/SKILL.md)
 
 <a id="api"></a>
 
