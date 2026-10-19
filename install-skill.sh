@@ -112,6 +112,11 @@ if [ "$INSTALL_CLAUDE" = "1" ]; then
     curl -fsSL "$REPO_RAW/skill/$SKILL_NAME/upload.sh" -o "$DEST/upload.sh"
     curl -fsSL "$REPO_RAW/skill/$SKILL_NAME/SKILL.md" -o "$DEST/SKILL.md"
   fi
+  # 参考资料（如技术解析的拆解清单）
+  mkdir -p "$DEST/references"
+  for ref in tech-explainer.md; do
+    fetch_or_copy "skill/$SKILL_NAME/references/$ref" "$DEST/references/$ref"
+  done
   chmod +x "$DEST/upload.sh"
   info "Skill 文件已就位"
 
