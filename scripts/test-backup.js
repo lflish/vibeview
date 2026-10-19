@@ -18,13 +18,17 @@ try {
   fs.writeFileSync(path.join(data, 'meta', 'abc.json'), '{"id":"abc"}');
   fs.writeFileSync(path.join(data, 'statistics', 'uploads', 'abc.json'), '{"id":"abc"}');
   fs.writeFileSync(path.join(data, 'account-state.json'), '{}');
+  fs.mkdirSync(path.join(data, 'sites', 'site1', 'css'), { recursive: true });
+  fs.mkdirSync(path.join(data, 'sites', '.incoming'), { recursive: true });
+  fs.writeFileSync(path.join(data, 'sites', 'site1', 'css', 'a.css'), 'body{}');
+  fs.writeFileSync(path.join(data, 'sites', '.incoming', 'partial.zip'), 'temp');
   const db = new DatabaseSync(path.join(data, 'statistics', 'visits.sqlite'));
   db.exec('CREATE TABLE t (n INTEGER); INSERT INTO t VALUES (42);');
   db.close();
   const config = path.join(temp, 'config.yaml');
   fs.writeFileSync(config, [
     'server: { port: 1, base_url: "http://localhost" }',
-    `storage: { html_dir: "${pages}", image_dir: "${data}/images", video_dir: "${data}/videos", meta_dir: "${data}/meta" }`,
+    `storage: { html_dir: "${pages}", image_dir: "${data}/images", video_dir: "${data}/videos", site_dir: "${data}/sites", meta_dir: "${data}/meta" }`,
     `access: { attempts_file: "${data}/preview-attempts.json" }`,
     `admin: { login_attempts_file: "${data}/admin-login-attempts.json" }`,
     'tokens: []', '',
@@ -54,6 +58,8 @@ try {
   assert.ok(fs.existsSync(path.join(out, 'account-state.json')));
   assert.ok(fs.existsSync(path.join(out, 'config.yaml')));
   assert.ok(fs.existsSync(path.join(out, 'images')));
+  assert.equal(fs.readFileSync(path.join(out, 'sites', 'site1', 'css', 'a.css'), 'utf8'), 'body{}', 'multi-page sites are backed up');
+  assert.ok(!fs.existsSync(path.join(out, 'sites', '.incoming')), 'in-progress site uploads are skipped');
   assert.ok(!fs.existsSync(path.join(out, 'videos')), 'missing directories are skipped');
   const snapshot = new DatabaseSync(path.join(out, 'statistics', 'visits.sqlite'), { readOnly: true });
   assert.equal(snapshot.prepare('SELECT n FROM t').get().n, 42, 'visits snapshot is readable');

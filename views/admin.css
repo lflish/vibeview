@@ -162,6 +162,7 @@
   .type-tile.html { background: var(--blue-bg); color: var(--blue-text); }
   .type-tile.image { background: var(--green-bg); color: var(--green-text); }
   .type-tile.video { background: var(--orange-bg); color: var(--orange-text); }
+  .type-tile.site { background: var(--purple-bg); color: var(--purple-text); }
   .res-body { display: grid; gap: 3px; min-width: 0; max-width: 520px; }
   .res-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
   .res-title a { overflow: hidden; color: var(--text); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }

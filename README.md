@@ -36,13 +36,13 @@ Sharing and organizing a file should be as easy as generating it. Upload with `d
 
 | Upload and preview | Share with access protection |
 | :--- | :--- |
-| One upload workflow for HTML, images, and video. Built for AI reports, visualizations, page prototypes, and short demos. | Random access codes by default, with adjustable expiration, reset, no expiration, or explicit public access. Original files are protected too. |
+| One upload workflow for HTML, images, video, and multi-page sites. Built for AI reports, visualizations, page prototypes, front-end builds, and short demos. | Random access codes by default, with adjustable expiration, reset, no expiration, or explicit public access. Original files are protected too. |
 | **Find it as your library grows** | **Use your existing tools** |
 | Descriptions, sources, creation dates, and age at a glance. Organize pages by category, project, agent, and tag; search, filter, sort, paginate, and delete in bulk. | Upload through the CLI, curl, AI Skills, or CI. Admin pages support light, dark, and system themes, starting with light. |
 | **Know who is looking** | **Organize by project** |
 | Opens and last-opened time for every link, successful and failed access-code checks, and visits to expired links show which shares are used and which can be cleaned up. Only daily counts are stored; no IPs. | Uploads record the git repository name as their project. Switch projects like folders in resource management, and view uploads and opens per project in statistics. |
 
-**Defaults:** **50 MB** per file · **7-day** access codes · **Indefinite** file retention · **Optional** account quotas.
+**Defaults:** **50 MB** per file · sites up to **500 files / 50 MB** unpacked · **7-day** access codes · **Indefinite** file retention · **Optional** account quotas.
 
 ## Screenshots
 
@@ -154,6 +154,16 @@ dview edit Ab3xK9mP2qR7sT1v --category doc         # Reclassify after upload
 dview me                                         # Your usage
 dview delete Ab3xK9mP2qR7sT1v                      # Delete your resource
 ```
+
+### Multi-page sites
+
+For a prototype with several pages, or a front-end build such as `dist/`, upload the whole directory. The CLI zips it for you; you can also upload a ready-made `.zip`:
+
+```bash
+dview upload ./dist --json        # The directory must have index.html at its root
+```
+
+The site becomes **one** resource with **one** access code, and its pages link to each other with relative paths (`about.html`, `assets/app.js`). Use relative asset paths when building (for Vite, `base: './'`) and hash routing for single-page apps. Hidden files (such as `.env`), `node_modules`, and symlinks are not uploaded. AI agents pick between a single HTML file and a site automatically; `/dview --simple` or `/dview --site` forces a mode. See [multi-page sites](docs/user-guide.en.md#multi-page-sites).
 
 **AI integrations:** [Claude Code setup](docs/user-guide.en.md#ai-skills-and-integrations) · [Codex / Cursor / Agents](AGENTS.md) · [Upload Skill](skill/dview-upload/SKILL.md) · [curl and CI](docs/user-guide.en.md#upload-and-share). Generated pages use a light theme by default.
 

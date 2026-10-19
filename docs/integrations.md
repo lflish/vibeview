@@ -44,6 +44,7 @@ npm install -g .          # 或: npm link
 bash install-skill.sh --url "$DVIEW_URL" --token "$DVIEW_TOKEN" --cli
 
 dview upload ./chart.html --json --category dashboard --tag sales
+dview upload ./dist --json --category prototype   # 多页面站点：上传目录（根部需有 index.html）
 dview list --category dashboard
 dview edit <id> --tag sales,q3
 dview me
@@ -63,7 +64,7 @@ bash install-skill.sh --url "$DVIEW_URL" --token "$DVIEW_TOKEN"
 ```
 
 - Skill：`dview-upload`（AI 自动选用）
-- 命令：在对话里输入 `/dview <页面描述>` → 生成 HTML 并上传
+- 命令：在对话里输入 `/dview <页面描述>` → 自动判断生成单个 HTML 还是多页面站点，然后上传；`/dview --simple <描述>` 或 `/dview --site <描述>` 强制指定模式
 
 也可用旧脚本：`bash ~/.claude/skills/dview-upload/upload.sh <file>`
 

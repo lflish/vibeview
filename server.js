@@ -18,6 +18,7 @@ const { mountPreviewRoutes } = require('./lib/preview-routes');
 const { createPreviewProxy } = require('./lib/preview-proxy');
 const { createPreviewAccess, constantEqual } = require('./lib/preview-access');
 const { createAdminLoginProtection } = require('./lib/admin-login');
+const { extractSite, SiteArchiveError } = require('./lib/site-archive');
 // 预览访问计数：爬虫与带管理员会话 cookie 的打开单独计数，不算作访客。
 // 预览路由挂在 session 中间件之前，这里只看 cookie 是否存在（只有登录成功才会下发）。
 function hasAdminCookie(req) {
@@ -65,6 +66,7 @@ for (const d of [
   config.storage.htmlDir,
   config.storage.imageDir,
   config.storage.videoDir,
+  config.storage.siteDir,
   config.storage.metaDir,
 ]) {
   fs.mkdirSync(d, { recursive: true });
@@ -95,18 +97,23 @@ function safeFilename(original) {
 }
 
 // ---- multer：先判类型再决定目录，沿用同一个 id ----
+// 站点 zip 先落在 <site_dir>/.incoming/<id>.zip，解压到 <site_dir>/<id>/ 后删除。
+const incomingDir = path.join(config.storage.siteDir, '.incoming');
+function incomingZip(id) {
+  return path.join(incomingDir, `${id}.zip`);
+}
 const storage = multer.diskStorage({
   destination(req, file, cb) {
     const type = store.typeForMime(file.mimetype, file.originalname);
     if (!type) return cb(new Error('unsupported file type'));
     if (!req.uploadId) req.uploadId = store.newId();
     req.uploadType = type;
-    const dir = store.fileDir(type, req.uploadId);
+    const dir = type === 'site' ? incomingDir : store.fileDir(type, req.uploadId);
     fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
   filename(req, file, cb) {
-    cb(null, safeFilename(file.originalname));
+    cb(null, req.uploadType === 'site' ? path.basename(incomingZip(req.uploadId)) : safeFilename(file.originalname));
   },
 });
 
@@ -119,11 +126,15 @@ const upload = multer({
 }).single('file');
 
 function mapItem(m) {
-  const description = m.description || metadata.descriptionFromFile(store.filePath(m), m.type);
+  // 索引行不含站点的 zip 名和文件数，从元数据补齐
+  const full = m.type === 'site' && m.fileCount === undefined ? store.readMeta(m.id) || m : m;
+  const description = m.description || metadata.descriptionFromFile(store.filePath(m.type === 'site' ? { ...m, filename: 'index.html' } : m), m.type);
   return {
     id: m.id,
     type: m.type,
-    filename: m.filename,
+    // 站点显示上传的 zip 名；入口固定是 index.html
+    filename: m.type === 'site' ? full.archiveName || 'site.zip' : m.filename,
+    ...(m.type === 'site' ? { fileCount: full.fileCount } : {}),
     size: m.size,
     source: m.source,
     description,
@@ -155,7 +166,7 @@ function listFilters(query = {}) {
   const category = text(query.category);
   return {
     q: text(query.q).toLowerCase(),
-    type: ['html', 'image', 'video'].includes(query.type) ? query.type : '',
+    type: ['html', 'image', 'video', 'site'].includes(query.type) ? query.type : '',
     source: text(query.source),
     category: category === 'none' ? 'none' : classification.normalizeCategory(category),
     agent: classification.normalizeLabel(text(query.agent)),
@@ -202,9 +213,11 @@ function countFacets(items) {
   return Object.fromEntries(Object.entries(facets).map(([key, map]) => [key, list(map)]));
 }
 
-// 上传失败时清掉已落盘的临时目录
+// 上传失败时清掉已落盘的临时目录（站点还有待解压的 zip）
 function cleanupFailedUpload(req) {
   if (!req.uploadId || !req.uploadType) return;
+  if (req.uploadType === 'site') fs.rmSync(incomingZip(req.uploadId), { force: true });
+  if (req.siteExtracted === false) return; // 解压目录不是本次创建的，不能删
   const dir = store.fileDir(req.uploadType, req.uploadId);
   fs.rmSync(dir, { recursive: true, force: true });
 }
@@ -227,14 +240,35 @@ app.post('/upload', requireToken, (req, res) => {
     }
     if (!req.file) return res.status(400).json({ error: 'no file (field name must be "file")' });
 
-    const q = accounts.checkQuota(req.account, req.file.size);
+    // 站点：解压后按解压总大小计配额
+    let site = null;
+    if (req.uploadType === 'site') {
+      try {
+        req.siteExtracted = false;
+        site = await extractSite(incomingZip(req.uploadId), store.fileDir('site', req.uploadId), {
+          maxFiles: config.storage.siteMaxFiles,
+          maxBytes: config.storage.siteMaxUnpackedMb * 1024 * 1024,
+        });
+        req.siteExtracted = true;
+      } catch (error) {
+        cleanupFailedUpload(req);
+        if (error instanceof SiteArchiveError) return res.status(400).json({ error: error.message });
+        console.error('[upload] site extraction failed:', error.message);
+        return res.status(500).json({ error: 'unable to unpack site' });
+      } finally {
+        fs.rmSync(incomingZip(req.uploadId), { force: true });
+      }
+    }
+    const uploadedSize = site ? site.size : req.file.size;
+
+    const q = accounts.checkQuota(req.account, uploadedSize);
     if (!q.ok) {
       cleanupFailedUpload(req);
       return res.status(q.status || 429).json({ error: q.error });
     }
 
     const id = req.uploadId;
-    const filename = safeFilename(req.file.originalname);
+    const filename = site ? 'index.html' : safeFilename(req.file.originalname);
     let createdAccess;
     try {
       const mode = req.body.access_mode;
@@ -254,8 +288,9 @@ app.post('/upload', requireToken, (req, res) => {
       id,
       type: req.uploadType,
       filename,
-      mime: req.file.mimetype,
-      size: req.file.size,
+      mime: site ? 'text/html' : req.file.mimetype,
+      size: uploadedSize,
+      ...(site ? { archiveName: safeFilename(req.file.originalname), fileCount: site.fileCount } : {}),
       source: req.uploadSource,
       description: metadata.descriptionForUpload(storedPath, req.uploadType, req.body && req.body.description),
       ...classification.forUpload(storedPath, req.uploadType, req.body || {}),
@@ -268,7 +303,8 @@ app.post('/upload', requireToken, (req, res) => {
       return res.status(500).json({ error: 'unable to save upload metadata' });
     }
     res.set('Cache-Control', 'no-store');
-    res.json({ url: `${config.baseUrl}/v/${id}`, id, source: meta.source, description: meta.description,
+    res.json({ url: `${config.baseUrl}/v/${id}${site ? '/' : ''}`, id, type: meta.type, ...(site ? { fileCount: site.fileCount, size: site.size } : {}),
+      source: meta.source, description: meta.description,
       ...classification.normalize(meta), access: previewAccess.info(meta), accessCode: createdAccess.code });
   });
 });
@@ -297,7 +333,7 @@ app.delete('/api/me/items/:id', requireToken, (req, res) => {
 });
 
 // ---- B. 预览接口：访问验证在直出与 sidecar 代理前统一执行 ----
-app.post('/v/:id/unlock', express.urlencoded({ extended: false, limit: '1kb' }), previewAccess.unlock);
+app.post('/v/:id/unlock', express.urlencoded({ extended: false, limit: '4kb' }), previewAccess.unlock);
 app.use('/v/:id', previewAccess.requireAccess);
 // proxy_to_render=true：反代到 sidecar；失败返回 502，禁止静默回退到本进程直出
 if (config.preview.proxyToRender) {
@@ -356,7 +392,7 @@ function visitSummary(query = {}) {
   const text = (value) => (typeof value === 'string' ? value.trim().slice(0, 120) : '');
   const filters = {
     source: text(query.source),
-    type: ['html', 'image', 'video'].includes(query.type) ? query.type : '',
+    type: ['html', 'image', 'video', 'site'].includes(query.type) ? query.type : '',
     project: text(query.project) === '-' ? '-' : classification.normalizeLabel(text(query.project)),
   };
   const current = store.listAll().map((meta) => ({ ...meta, ...classification.normalize(meta) }))

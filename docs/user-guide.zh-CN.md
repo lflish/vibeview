@@ -2,7 +2,7 @@
 
 [← README](../README.zh-CN.md) · [English](user-guide.en.md)
 
-服务名是 **vibeview**，命令行工具名是 **`dview`**。支持 HTML、PNG / JPG / GIF / WebP / SVG 等图片，以及 MP4 / WebM 视频。HTML 简介优先读取上传的 `description`，否则从 `<meta name="description">`、`<title>` 或标题提取。默认单文件上限 50 MB，文件永久保留。
+服务名是 **vibeview**，命令行工具名是 **`dview`**。支持 HTML、PNG / JPG / GIF / WebP / SVG 等图片、MP4 / WebM 视频，以及多页面站点（目录或 zip）。HTML 简介优先读取上传的 `description`，否则从 `<meta name="description">`、`<title>` 或标题提取。默认单文件上限 50 MB，文件永久保留。
 
 ## 快速开始
 
@@ -99,6 +99,26 @@ curl -fsS -X POST "${DVIEW_URL%/}/upload" \
 ```
 
 可选表单字段：`access_days=7` 指定访问码有效天数，`access_mode=public` 明确开放公开访问。未指定时按服务端默认配置处理。分类字段见下一节。
+
+### 多页面站点
+
+一个 HTML 放不下的内容（多个页面互相跳转的原型、带图片和数据文件的演示、前端框架打包出的 `dist/`）可以作为**站点**上传：整个目录是一个资源，共用一个链接和一个访问码。
+
+```bash
+dview upload ./dist --json                 # CLI 自动打包目录
+curl -fsS -X POST "${DVIEW_URL%/}/upload" \
+  -H "Authorization: Bearer $DVIEW_TOKEN" \
+  -F "file=@./site.zip"                    # 或者直接上传 zip
+```
+
+- 入口是根部的 `index.html`。zip 里只有一个顶层目录（如直接压缩了 `dist/`）时，会自动去掉这一层。
+- 预览地址是 `/v/<id>/`，子页面和资源是 `/v/<id>/about.html`、`/v/<id>/assets/app.js`。站内链接必须用**相对路径**；以 `/` 开头的地址指向服务根目录，会 404。Vite 设 `base: './'`，其他构建工具同理。
+- 目录请求自动返回其中的 `index.html`；找不到文件时，站点里有 `404.html` 就返回它。单页应用请用 hash 路由。
+- CLI 和 Skill 打包时跳过 `.` 开头的文件和目录（如 `.env`、`.git`）、`node_modules` 和符号链接。服务端还会跳过 zip 里的 `__MACOSX`，并拒绝：越出目录的路径、符号链接、加密条目、`~` 开头的路径段，以及不在允许列表里的文件类型。允许 html、css、js、mjs、json、map、txt、md、xml、csv、tsv、webmanifest、常见图片、mp4/webm、mp3/wav/ogg/m4a、woff/woff2/ttf/otf/eot、wasm、glb/gltf/bin、pdf。
+- 上限：zip 包受 `storage.max_size_mb` 限制；站点最多 `storage.site_max_files`（默认 500）个文件，解压后最多 `storage.site_max_unpacked_mb`（默认 50）MB，按实际解压字节计算。配额按解压后的总大小计。
+- 上传响应额外包含 `type: "site"`、`fileCount` 和 `size`（解压后字节数）；管理端显示为「站点」，标注文件数。
+
+**访问保护**：访客在任意页面输入一次访问码即可浏览整个站点，验证后回到原来打开的页面。站点页面在浏览器沙箱里运行，样式、模块脚本和 `fetch` 等子请求不会携带 cookie，所以验证通过后，服务会把访客重定向到带短期凭证的地址 `/v/<id>/~<凭证>/...`，站内相对链接自动带上它。凭证绑定该站点和当前访问码版本，与预览授权同时到期（默认 30 分钟）；重置访问码、改变有效期或重启主服务都会让它失效，之后访客需要重新验证。凭证在地址栏里可见，分享时请分享上传返回的地址，而不是浏览器地址栏里的地址。
 
 ### 分类、项目与标签
 
@@ -223,7 +243,9 @@ statistics:
 | 字段 | 默认值 / 说明 |
 | --- | --- |
 | `server.port` / `server.base_url` | `3000` / 对外预览地址 |
-| `storage.max_size_mb` | `50`，单文件大小上限 |
+| `storage.max_size_mb` | `50`，单个上传文件大小上限；站点按 zip 包大小算 |
+| `storage.site_max_files` / `site_max_unpacked_mb` | `500` / `50`，站点的文件数和解压后总大小上限 |
+| `storage.site_dir` | `./data/sites`，站点解压目录 |
 | `storage.retention_days` | `0`；正数会自动删除超过该天数的文件 |
 | `tokens[].max_files` / `max_storage_mb` | 不设则不限制该账户用量 |
 | `tokens[].retention_days` | 覆盖全局保留期；`0` 为永久保留 |
@@ -284,7 +306,7 @@ npm start
 
 ### HTML 的浏览器行为
 
-只上传可信内容。所有 HTML 预览（包括显式公开的）都使用 `sandbox allow-scripts` 隔离同源权限，页面脚本无法借管理员的登录状态调用管理接口；脚本可以运行，但浏览器存储和同源请求不可用，依赖这些能力的页面需要适配。Docker sidecar 提供服务端进程隔离，不能代替浏览器端隔离。
+只上传可信内容。所有 HTML 预览和多页面站点（包括显式公开的）都使用 `sandbox allow-scripts` 隔离同源权限，页面脚本无法借管理员的登录状态调用管理接口；脚本可以运行，但浏览器存储和同源请求不可用，依赖这些能力的页面需要适配。Docker sidecar 提供服务端进程隔离，不能代替浏览器端隔离。
 
 浏览器提示 `NET::ERR_CERT_DATE_INVALID` 时，检查实际对外证书的有效期；续期后还需安装证书并重新加载反向代理。项目提供 [Nginx 证书安装辅助脚本](../scripts/install-nginx-cert.sh)，其目标路径需要与部署配置一致，执行需要管理员的 sudo 权限。
 
@@ -292,7 +314,7 @@ npm start
 
 | 方法与路径 | 认证 | 用途 |
 | --- | --- | --- |
-| `POST /upload` | Bearer 上传 token | 上传文件，返回链接、访问状态和新访问码 |
+| `POST /upload` | Bearer 上传 token | 上传文件或站点 zip，返回链接、访问状态和新访问码 |
 | `GET /api/me` | Bearer 上传 token | 本账户信息、用量与配额 |
 | `GET /api/me/items` | Bearer 上传 token | 列出本账户资源 |
 | `DELETE /api/me/items/:id` | Bearer 上传 token | 删除本账户资源 |
@@ -301,6 +323,7 @@ npm start
 | `GET /v/:id` | 公开，或已验证的预览 cookie | 预览页面；未授权时显示访问码表单 |
 | `POST /v/:id/unlock` | 表单中的 `code` | 验证访问码并设置预览 cookie |
 | `GET /v/:id/raw` | 与预览页相同 | 获取原文件，支持 Range 请求 |
+| `GET /v/:id/<路径>` | 公开站点直接访问；受保护站点用 `/v/:id/~<凭证>/<路径>` | 多页面站点的页面和资源；未授权的页面显示访问码表单 |
 | `GET /admin/api/statistics` | 管理员 session | 概览、趋势、月历、分布与活动 |
 | `GET /admin/api/statistics/day` | 管理员 session | 当日上传事件与分页明细 |
 | `GET /admin/api/statistics/visits` | 管理员 session | 打开次数、访问码验证、热门资源、按项目分布与访问码状态 |
