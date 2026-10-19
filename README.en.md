@@ -142,7 +142,7 @@ The response includes a preview link, access code, and expiration time:
 
 Open the link and enter the access code to view the file. AI tools and scripts should save `url`, `accessCode`, and `access.expiresAt`. Keep the code out of URLs and generated HTML.
 
-Run `npm link` to use `dview` directly:
+Run `npm link` to use `dview` (or its alias `vibeview`) directly:
 
 ```bash
 dview upload ./report.html --json --access-days 1 # Code valid for 1 day
@@ -173,7 +173,7 @@ Administrator login has separate brute-force protection: by default, 10 failed a
 
 ## Deployment
 
-Run the Node.js main service under PM2 or systemd. Public deployments need HTTPS and the actual `server.base_url`. The optional Docker render sidecar mounts files read-only and serves previews through the main service's authenticated proxy.
+Run the Node.js main service under PM2 or systemd. Public deployments need HTTPS and the actual `server.base_url`. `npm run backup` packs all data into one archive; a systemd timer can run it daily. The optional Docker render sidecar mounts files read-only and serves previews through the main service's authenticated proxy.
 
 [Deployment and gateway setup](docs/user-guide.en.md#deployment) · [Sidecar design](docs/design-render-sidecar.md) · [This project's TX deployment Skill](.agents/skills/deploy-tx/SKILL.md)
 
