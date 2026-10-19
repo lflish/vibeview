@@ -6,6 +6,11 @@ config.yaml
 
 # 部署目标（主机、目录、域名），只在本机保存
 .agents/skills/deploy-view/local.env
+# 本机额外的敏感信息扫描规则
+.sensitive-patterns.local
+
+# 发布包（scripts/package-release.sh）
+dist/
 
 # 上传的数据文件
 data/

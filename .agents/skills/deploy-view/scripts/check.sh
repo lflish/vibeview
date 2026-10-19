@@ -37,6 +37,12 @@ service_online() {
     systemctl --user is-active --quiet "$VIEW_SERVICE_NAME.service"
   fi
 }
+if [ -f RELEASE ]; then
+  printf 'INFO deployed %s (commit %s, %s, at %s)\n' "$(sed -n 's/^version=//p' RELEASE)" "$(sed -n 's/^commit=//p' RELEASE | cut -c1-12)" \
+    "$(sed -n 's/^source=//p' RELEASE)" "$(sed -n 's/^deployed_at=//p' RELEASE)"
+else
+  echo 'INFO deployed version not recorded (no RELEASE file)'
+fi
 check 'config exists' test -f config.yaml
 check 'data exists' test -d data
 check "$VIEW_SERVICE_MANAGER $VIEW_SERVICE_NAME online" service_online

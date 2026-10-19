@@ -1,0 +1,13 @@
+# 运行时文件清单：发布包（scripts/package-release.sh）和部署（deploy-view）只包含这些路径。
+# 不包含配置、数据、.env 或秘密文件。新增运行时目录时在这里加一行。
+server.js
+render-server.js
+package.json
+package-lock.json
+Dockerfile.render
+docker-compose.yml
+config.example.yaml
+lib
+views
+scripts
+bin

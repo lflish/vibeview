@@ -32,13 +32,12 @@ case "$VIEW_SERVICE_MANAGER" in
   *) echo "VIEW_SERVICE_MANAGER 只能是 systemd-user 或 pm2" >&2; return 2 2>/dev/null || exit 2 ;;
 esac
 
-# 在目标机执行 stdin 中的脚本；所有 VIEW_* 变量会带过去。
+# 在目标机执行 stdin 中的脚本；当前所有 VIEW_* 变量（除 VIEW_DEPLOY_HOST）都会带过去。
 #   on_target <<'EOF' ... EOF        执行 stdin 里的脚本
 #   on_target -c '<命令>'             执行一条命令，stdin 留给数据（例如 tar 管道）
 on_target() {
   local vars cmd="bash -s"
-  vars="$(for k in VIEW_DEPLOY_DIR VIEW_RELEASES_DIR VIEW_MAIN_PORT VIEW_RENDER_PORT VIEW_SERVICE_MANAGER VIEW_SERVICE_NAME; do
-    printf 'export %s=%q; ' "$k" "${!k}"; done)"
+  vars="$(for k in $(compgen -v VIEW_); do [[ "$k" == VIEW_DEPLOY_HOST ]] && continue; printf 'export %s=%q; ' "$k" "${!k}"; done)"
   if [[ "${1:-}" == -c ]]; then cmd="bash -c $(printf '%q' "${2:?on_target -c 需要命令}")"; fi
   if [[ -n "$VIEW_DEPLOY_HOST" ]]; then
     ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 \

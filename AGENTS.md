@@ -1,10 +1,12 @@
 # Agent notes — vibeview
 
-## Deployment skill
+## Release and deployment skills
 
-For publishing this project or checking its deployment, read
-[deploy-view](.agents/skills/deploy-view/SKILL.md). Example: “使用 $deploy-view 发布当前项目并验证”。
-The skill includes a read-only check and the backup, sync, sidecar, restart, and rollback workflow.
+- [release](.agents/skills/release/SKILL.md): cut a version — checks, version bump, bilingual notes,
+  tag, deterministic runtime package, GitHub Release. Touches only git/GitHub. Example: “使用 $release 发布 1.2.0”。
+- [deploy-view](.agents/skills/deploy-view/SKILL.md): deploy a released tag (or, by exception, a commit
+  or the worktree) to production with dry run, backup, health checks, `RELEASE` record, and automatic rollback.
+  Example: “使用 $deploy-view 部署 v1.2.0”。
 The deployment target (host, directory, public URL) comes from `VIEW_*` environment variables or the
 untracked `.agents/skills/deploy-view/local.env`; never commit real hosts, IPs, or usernames.
 
