@@ -30,6 +30,8 @@ description: 发布当前 vibeview 项目到部署目标（本机或 SSH 服务�
 
 主服务放在反向代理后面时，配置 `server.host: 127.0.0.1` 和 `server.trust_proxy: loopback`，外部只能经代理访问。
 
+目标机的 nginx 结构、证书方式等主机相关说明写在 `local.env` 的注释里，发布前先读。若 443 由 nginx `stream` 按 SNI 分流并开启 `proxy_protocol`，vibeview 站点必须以 `proxy_protocol` 监听并用 `real_ip_header proxy_protocol` 取访客 IP；其他后端经中转去掉 PROXY 头。改动这类 nginx 配置前备份、`nginx -t`，reload 后逐个核对所有分流目标的响应，异常立即恢复备份。
+
 ## 工作流程
 
 1. 检查 `git status --short` 和本次修改，确认用户想发布的内容。未提交的新文件也可能是发布内容，不能只用 `git archive HEAD`；保留用户工作区，不自动提交或推送。
