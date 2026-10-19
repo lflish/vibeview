@@ -1,6 +1,6 @@
 # vibeview 使用指南
 
-[← README.md](../README.md) · [English](user-guide.en.md)
+[← README](../README.zh-CN.md) · [English](user-guide.en.md)
 
 服务名是 **vibeview**，命令行工具名是 **`dview`**。支持 HTML、PNG / JPG / GIF / WebP / SVG 等图片，以及 MP4 / WebM 视频。HTML 简介优先读取上传的 `description`，否则从 `<meta name="description">`、`<title>` 或标题提取。默认单文件上限 50 MB，文件永久保留。
 
