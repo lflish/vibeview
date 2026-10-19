@@ -239,7 +239,7 @@ Configuration is read from `config.yaml` in the repository root. Set `DVIEW_CONF
 
 ### Main service
 
-The main service handles uploads, access verification, administration, accounts, and cleanup. Run it under a process manager such as PM2 or systemd. Public deployments need a reverse proxy and HTTPS; set `server.base_url` to the actual domain.
+The main service handles uploads, access verification, administration, accounts, and cleanup. Run it under a process manager such as PM2 or systemd. Public deployments need a reverse proxy and HTTPS; set `server.base_url` to the actual domain. Behind nginx or another reverse proxy, set `server.host: 127.0.0.1` and `server.trust_proxy: loopback` so the main service accepts only local proxy connections and nobody can bypass HTTPS by connecting to its port directly.
 
 Back up `config.yaml`, uploaded data, and restricted environment files. JSON metadata is the authoritative resource record; `data/resources.sqlite` is a rebuildable query index. Keep configured tokens, passwords, and session secrets private. Give upload credentials only to machines or users that need to upload.
 
@@ -279,7 +279,7 @@ The main service and Compose must use **the same** gateway secret. For productio
 
 If the port is occupied, change `RENDER_HOST_PORT` and the main service's `preview.render_url` or `DVIEW_RENDER_URL` together. The sidecar port binds only to loopback. A sidecar failure causes preview errors without silently falling back to rendering in the main service. When using the sidecar, the main service's storage directories must match the mounted `./data` tree.
 
-[Sidecar design](../docs/design-render-sidecar.md) · [This project's TX deployment Skill](../.agents/skills/deploy-tx/SKILL.md)
+[Sidecar design](../docs/design-render-sidecar.md) · [Deployment Skill](../.agents/skills/deploy-view/SKILL.md)
 
 ### Browser behavior of HTML
 
@@ -349,7 +349,7 @@ lib/                 Storage, index, protection, cleanup, preview logic
 views/               Admin/login pages and themes
 bin/dview            Upload / management CLI
 skill/ + command/    Upload Skill and Claude command
-.agents/skills/      This project's TX deployment Skill
+.agents/skills/      Deployment Skill (deploy-view)
 scripts/             Regression tests and deployment helpers
 ```
 
@@ -361,5 +361,5 @@ Issues and PRs are welcome. For bug reports, include your Node.js version, deplo
 
 - [Full configuration](../config.example.yaml)
 - [Agent instructions](../AGENTS.md) · [Upload Skill](../skill/dview-upload/SKILL.md)
-- [Sidecar design](../docs/design-render-sidecar.md) · [TX deployment Skill](../.agents/skills/deploy-tx/SKILL.md)
+- [Sidecar design](../docs/design-render-sidecar.md) · [Deployment Skill](../.agents/skills/deploy-view/SKILL.md)
 - [Requirements and design notes](../docs/SPEC.md)

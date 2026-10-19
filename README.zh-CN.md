@@ -175,7 +175,7 @@ dview delete Ab3xK9mP2qR7sT1v                      # 删除本账户资源
 
 主服务使用 Node.js，可由 PM2 或 systemd 守护；公网部署配置 HTTPS 和实际的 `server.base_url`。`npm run backup` 把全部数据打成一个备份包，可配合 systemd 定时器每天自动执行。可选 Docker render sidecar 只读挂载文件，通过主服务的认证代理提供预览。
 
-[部署步骤与 gateway 密钥](docs/user-guide.zh-CN.md#部署) · [Sidecar 设计](docs/design-render-sidecar.md) · [本项目 TX 发布 Skill](.agents/skills/deploy-tx/SKILL.md)
+[部署步骤与 gateway 密钥](docs/user-guide.zh-CN.md#部署) · [Sidecar 设计](docs/design-render-sidecar.md) · [部署 Skill](.agents/skills/deploy-view/SKILL.md)
 
 <a id="api"></a>
 

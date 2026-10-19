@@ -240,7 +240,7 @@ statistics:
 
 ### 主服务
 
-主服务负责上传、访问验证、管理、账户和清理，可用 PM2 或 systemd 守护。对外服务需要反向代理和 HTTPS，并将 `server.base_url` 设置为实际域名。
+主服务负责上传、访问验证、管理、账户和清理，可用 PM2 或 systemd 守护。对外服务需要反向代理和 HTTPS，并将 `server.base_url` 设置为实际域名。放在 nginx 等反向代理后面时，设置 `server.host: 127.0.0.1` 和 `server.trust_proxy: loopback`，让主服务只接受本机代理的连接，外部无法绕过 HTTPS 直连端口。
 
 备份 `config.yaml`、上传数据及受限环境文件。JSON 元数据是资源的权威记录，`data/resources.sqlite` 是可重建的查询索引。配置中的 token、密码和 session secret 不要公开；上传凭据应只发给需要上传的机器或用户。
 
@@ -280,7 +280,7 @@ npm start
 
 端口被占用时，可设置其他 `RENDER_HOST_PORT`，同时修改主服务的 `preview.render_url` 或 `DVIEW_RENDER_URL`。Sidecar 端口只绑定 loopback；容器不可用时预览会报错，不会静默回退到主服务直接渲染。启用 sidecar 时，主服务的存储目录必须与容器挂载的 `./data` 一致。
 
-[Sidecar 设计](../docs/design-render-sidecar.md) · [本项目的 TX 发布 Skill](../.agents/skills/deploy-tx/SKILL.md)
+[Sidecar 设计](../docs/design-render-sidecar.md) · [部署 Skill](../.agents/skills/deploy-view/SKILL.md)
 
 ### HTML 的浏览器行为
 
@@ -350,7 +350,7 @@ lib/                 存储、索引、访问保护、清理与预览逻辑
 views/               管理页、登录页与主题
 bin/dview            上传 / 管理 CLI
 skill/ + command/    上传 Skill 与 Claude 命令
-.agents/skills/      本项目的 TX 发布 Skill
+.agents/skills/      部署 Skill（deploy-view）
 scripts/             回归测试与部署辅助脚本
 ```
 
@@ -362,5 +362,5 @@ scripts/             回归测试与部署辅助脚本
 
 - [完整配置](../config.example.yaml)
 - [Agent 使用说明](../AGENTS.md) · [上传 Skill](../skill/dview-upload/SKILL.md)
-- [Sidecar 设计](../docs/design-render-sidecar.md) · [TX 发布 Skill](../.agents/skills/deploy-tx/SKILL.md)
+- [Sidecar 设计](../docs/design-render-sidecar.md) · [部署 Skill](../.agents/skills/deploy-view/SKILL.md)
 - [需求与设计记录](../docs/SPEC.md)

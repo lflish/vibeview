@@ -17,7 +17,7 @@ if ! sudo -n true 2>/dev/null; then
   if [[ -t 0 ]]; then
     sudo -v
   else
-    echo "需要 sudo 权限。请在 TX 的交互终端运行本脚本，并在 sudo 提示时输入密码。" >&2
+    echo "需要 sudo 权限。请在终止 HTTPS 的服务器交互终端运行本脚本，并在 sudo 提示时输入密码。" >&2
     exit 2
   fi
 fi
