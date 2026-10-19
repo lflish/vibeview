@@ -1,11 +1,11 @@
 ---
 name: deploy-view
-description: 发布当前 vibeview 项目到部署目标（本机或 SSH 服务器），包括发布前检查、代码备份与同步、主服务重启、Docker render sidecar 更新、部署验证和故障回滚。用户要求发布、更新线上版本或检查部署时使用。
+description: 把 vibeview 的某个版本部署到线上（本机或 SSH 服务器）：预演、备份、同步、按需重建 sidecar、重启、验证，失败自动回滚。默认部署已发布的 tag；出版本、打 tag 用 release skill。用户要求部署、上线、更新线上版本、回滚或检查部署时使用。
 ---
 
-# 发布 vibeview
+# 部署 vibeview
 
-从项目根目录执行命令。用户已经要求发布时直接完成发布流程；仅要求检查、预演或创建技能时不执行生产变更。
+从项目根目录执行命令。用户已经要求部署时直接完成部署流程；仅要求检查或预演时不执行生产变更。这个 skill 只部署已有的版本或提交，**不打 tag、不改版本号**；出版本用 `$release`。
 
 ## 部署目标
 
@@ -34,16 +34,12 @@ description: 发布当前 vibeview 项目到部署目标（本机或 SSH 服务�
 
 ## 工作流程
 
-1. 检查 `git status --short` 和本次修改，确认用户想发布的内容。未提交的新文件也可能是发布内容，不能只用 `git archive HEAD`；保留用户工作区，不自动提交或推送。
-2. 执行只读检查：
-   ```bash
-   bash .agents/skills/deploy-view/scripts/check.sh
-   ```
-   区分原有故障和新回归。连接、磁盘或备份失败时停止发布；仅公网证书失败不等于本地服务失败，也不能报告完整验证通过。
-3. 本地运行 `SMOKE_SKIP_RENDER=1 npm test`。统计页面有改动时另运行 `npm run test:statistics -- --browser`。访问保护有改动时运行 `npm run test:access`。管理界面有改动时运行 `npm run test:browser`，需要可用的 Playwright 和 Chromium；缺失时明确记录，不声称通过。渲染相关改动在有 Docker 的环境运行 `npm run smoke:render`。
-4. 涉及统计功能时先读 [统计发布验证](references/statistics.md)。按 [发布与回滚操作](references/release.md) 创建固定发布快照、备份线上代码、预演同步、发布、更新依赖、重建 sidecar 和重启主服务。不要在测试后继续从可能变化的工作区直接同步。
-5. 再次运行只读检查，核对目标机代码与发布快照的校验和。对本次功能做实际验证；页面修改还应检查服务返回的内容，不能只看磁盘文件。
-6. 主服务或 sidecar 因本次发布无法恢复时，执行该次备份的代码回滚并重新验证。不要对失败发布无限重试；同一原因一次修复仍失败时保留证据并报告阻塞。
+1. 确认要部署的版本（见 [部署与回滚操作](references/deploy.md)）：默认是用户指定的或最新的 tag。部署未发版的提交或工作区属于例外，需要用户明确要求。
+2. 执行只读检查 `bash .agents/skills/deploy-view/scripts/check.sh`，它会显示目标机当前部署的版本（`RELEASE` 记录）。区分原有故障和新回归；连接或磁盘有问题时停止。
+3. 部署正式版本时，它的 CI 已经在发版时通过，不必重跑全部测试。部署 `--commit` / `--worktree` 时，先在本地跑 `SMOKE_SKIP_RENDER=1 npm test`，相关改动再跑 `npm run test:access`、`npm run test:browser` 或 `npm run smoke:render`；跑不了的明确记录。
+4. 涉及统计功能时先读 [统计发布验证](references/statistics.md)。
+5. 预演：`bash .agents/skills/deploy-view/scripts/deploy.sh <版本>`，把版本变化和文件变更告诉用户。然后加 `--yes` 执行。脚本会备份、同步、按需 `npm ci` / 重建 sidecar、重启、写 `RELEASE` 并检查；失败自动回滚。
+6. 对本次功能做实际验证；页面修改还应检查服务返回的内容，不能只看磁盘文件。需要手动回滚时用 `scripts/rollback.sh <release_id>`。不要对失败的部署无限重试；同一原因一次修复仍失败时保留证据并报告阻塞。
 
 ## 验证与报告
 
@@ -52,4 +48,4 @@ description: 发布当前 vibeview 项目到部署目标（本机或 SSH 服务�
 - 公网请求必须验证证书。`curl -k` 只可用于定位故障，不可作为上线成功证据。
 - 访问保护：确认历史资源默认加锁、新上传返回 `url`、`accessCode`、`access.expiresAt`，所有 HTML 预览（含公开）带 `sandbox` CSP。新访问码不写入发布日志，临时验证资源验证后删除。重试计数在 `access.attempts_file` 中，不纳入代码同步或回滚；计数实现要求单个主服务进程。
 - 证书或 nginx 需要 sudo 时，向用户说明具体命令，不能通过 Docker 绕过权限。普通发布不顺便修改 nginx。
-- 最终报告：发布内容/版本、备份路径、服务与 sidecar 状态、实际测试结果和未解决的问题（主机信息用变量名指代）。若回滚，明确当前运行的是旧版本。
+- 最终报告：部署的版本和提交、发布包 SHA-256、备份路径（release_id）、服务与 sidecar 状态、实际验证结果和未解决的问题（主机信息用变量名指代）。若回滚，明确当前运行的是旧版本。

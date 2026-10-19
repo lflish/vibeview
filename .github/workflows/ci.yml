@@ -26,6 +26,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # 公开内容里不能有真实 IP、私钥或 token
+      - run: bash scripts/scan-sensitive.sh
       # render sidecar 冒烟需要构建 Docker 镜像，单独用 npm run smoke:render 验证
       - run: npm test
         env:

@@ -349,7 +349,7 @@ lib/                 Storage, index, protection, cleanup, preview logic
 views/               Admin/login pages and themes
 bin/dview            Upload / management CLI
 skill/ + command/    Upload Skill and Claude command
-.agents/skills/      Deployment Skill (deploy-view)
+.agents/skills/      Release (release) and deployment (deploy-view) Skills
 scripts/             Regression tests and deployment helpers
 ```
 

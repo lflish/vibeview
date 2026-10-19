@@ -350,7 +350,7 @@ lib/                 存储、索引、访问保护、清理与预览逻辑
 views/               管理页、登录页与主题
 bin/dview            上传 / 管理 CLI
 skill/ + command/    上传 Skill 与 Claude 命令
-.agents/skills/      部署 Skill（deploy-view）
+.agents/skills/      发版（release）与部署（deploy-view）Skill
 scripts/             回归测试与部署辅助脚本
 ```
 

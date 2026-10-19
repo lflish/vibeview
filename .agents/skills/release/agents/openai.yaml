@@ -1,0 +1,4 @@
+interface:
+  display_name: "发布 vibeview 版本"
+  short_description: "检查、改版本号、写发布说明、打 tag、生成发布包并创建 GitHub Release（不部署）"
+  default_prompt: "使用 $release 给 vibeview 发布一个新版本。"
