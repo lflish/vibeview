@@ -38,6 +38,8 @@ printf 'DVIEW_URL=%s\nDVIEW_TOKEN=%s\n' "${DVIEW_URL:-<未设置>}" "${DVIEW_TOK
 
 通用要求:默认浅色风格(浅灰背景 `#f6f8fb`、白色卡片、深色正文 `#1e293b`、蓝色强调 `#2563eb`);完整的 `<!DOCTYPE html>`,设置 `charset=utf-8` 和 viewport;中文排版正常。页面在浏览器沙箱里运行,读写 `localStorage` 要 `try/catch`。
 
+**技术解析类需求**(介绍、讲解、分析、科普某个项目或技术):先读 `dview-upload` Skill 的 `references/tech-explainer.md`(全局安装在 `$HOME/.claude/skills/dview-upload/references/`,仓库里在 `skill/dview-upload/references/`),按它先读一手资料、定读者,再从至少 5 个角度拆解;上传前在浏览器里自查每一页。
+
 **简单模式**:生成一个**完整、自包含的单文件 HTML**。CSS 和脚本内联;图表优先用 CDN(如 Chart.js、ECharts)或纯 CSS/SVG,不依赖本地文件。用 Write 写入 `/tmp/dview-<简短英文名>-<时间戳>.html`。
 
 **站点模式**:在新目录 `/tmp/dview-<简短英文名>-<时间戳>/` 里生成多个文件,用 Write 逐个写入:
