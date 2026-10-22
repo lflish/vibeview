@@ -27,7 +27,7 @@ description: 给 vibeview 出一个新版本：检查、确定版本号、写中
    - 「验证」写实际跑过的测试和 CI 结果，不写没做的验证。部署状态不写进 Release（Release 与部署无关）。
    - 不写真实主机、IP、用户名、目录或内部域名。
 3. **推送并等 CI**：`git push origin main`，然后 `gh run watch`（或后台等待）直到这个提交的 CI 结束。CI 失败时修复后重新从第 1 步开始，不要强行发布。
-4. **发布**：`bash .agents/skills/release/scripts/publish.sh <X.Y.Z> <说明文件>`。它再次确认提交已推送、CI 成功、代码和说明都通过敏感信息扫描、说明里没有占位符；然后打 annotated tag，用 `scripts/package-release.sh` 生成运行时发布包 `vibeview-vX.Y.Z.tar.gz` 和 `.sha256`，推送 tag，并用 `gh release create` 创建 Release、上传这两个附件。
+4. **发布**：`bash .agents/skills/release/scripts/publish.sh <X.Y.Z> <说明文件>`。它再次确认提交已推送、CI 成功、代码和说明都通过敏感信息扫描、说明里没有占位符；然后打 annotated tag（说明由 `tag-message.sh` 生成：发布说明第一段的摘要、本版的需求说明清单和 Release 链接，所以发布说明的第一段要能单独概括这个版本；可以先运行 `tag-message.sh <X.Y.Z> <说明文件>` 预览），用 `scripts/package-release.sh` 生成运行时发布包 `vibeview-vX.Y.Z.tar.gz` 和 `.sha256`，推送 tag，并用 `gh release create` 创建 Release、上传这两个附件。
 5. **报告**：Release 链接、版本号、对应提交、发布包 SHA-256，以及「可以用 `$deploy-view` 部署 vX.Y.Z」。
 
 ## 发布包
