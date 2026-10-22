@@ -1,6 +1,6 @@
 # 页面模板
 
-状态：已实现，本地验收通过，未发布（本轮：模板核心 + 导出 Excel + 打印；模板管理页下一轮）。日期：2026-10-22。依赖：[resource-versions.md](./resource-versions.md)。
+状态：已实现，随 v1.4.0 发布（本轮：模板核心 + 导出 Excel + 打印；模板管理页下一轮）。日期：2026-10-22。依赖：[resource-versions.md](./resource-versions.md)。
 
 ## 目标与范围
 

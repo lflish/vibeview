@@ -31,6 +31,19 @@ pass "CI 通过 $url"
 bash scripts/scan-sensitive.sh HEAD >/dev/null || { bash scripts/scan-sensitive.sh HEAD; fail "敏感信息扫描未通过"; }
 bash scripts/scan-sensitive.sh --files "$notes" >/dev/null || { bash scripts/scan-sensitive.sh --files "$notes"; fail "发布说明里有敏感信息"; }
 grep -qE '__[A-Z]+__|TODO|TBD' "$notes" && fail "发布说明里还有占位符"
+
+# 本版新增或改动过的需求说明，必须在「需求说明」一节逐个链接，链接固定在这个 tag 上
+prev="$(git describe --tags --abbrev=0 "$head^" 2>/dev/null || true)"
+specs="$(git diff --name-only --diff-filter=AM ${prev:+"$prev"} "$head" -- 'docs/specs/*.md' | grep -v '/README\.md$' || true)"
+if [[ -n "$specs" ]]; then
+  grep -q '^### 需求说明' "$notes" || fail "本版改动了需求说明，发布说明需要「### 需求说明」一节"
+  grep -q '^### Specifications' "$notes" || fail "英文部分需要「### Specifications」一节"
+  repo="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+  while read -r spec; do
+    grep -qF "https://github.com/$repo/blob/$tag/$spec" "$notes" || fail "发布说明缺少 $spec 的链接（https://github.com/$repo/blob/$tag/$spec）"
+  done <<<"$specs"
+  pass "需求说明链接：$(echo "$specs" | wc -l) 个"
+fi
 pass "代码和发布说明的敏感信息扫描"
 
 # 先在本地打 tag，再按 tag 打包（包名和包内顶层目录都用 tag 命名）；推送失败会删掉本地 tag。
