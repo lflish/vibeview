@@ -26,6 +26,16 @@ printf 'DVIEW_URL=%s\nDVIEW_TOKEN=%s\n' "${DVIEW_URL:-<未设置>}" "${DVIEW_TOK
   ```
   然后不要继续后面的步骤。
 
+## 步骤 1.5:先查模板
+
+如果可以用 `dview` CLI(`command -v dview` 或仓库里的 `bin/dview`),先按用户的原话查模板:
+
+```bash
+dview template match "<用户的原话>" --json
+```
+
+命中一个时,按 `dview-upload` Skill 的「生成前先查模板」处理(`dview template show` → 整理数据 → `dview render`),跳过下面的步骤 2、3;命中多个时让用户选;没有命中或没有 CLI 时继续步骤 2。
+
 ## 步骤 2:选择模式
 
 - 参数以 `--simple` 开头:简单模式(单个 HTML)。

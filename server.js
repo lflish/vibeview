@@ -20,6 +20,12 @@ const { createPreviewAccess, constantEqual } = require('./lib/preview-access');
 const { createAdminLoginProtection } = require('./lib/admin-login');
 const { extractSite, SiteArchiveError } = require('./lib/site-archive');
 const versions = require('./lib/versions');
+const { createLocks } = require('./lib/locks');
+const { createTemplates, TemplateError } = require('./lib/templates');
+const templateSchema = require('./lib/template-schema');
+const { render: renderTemplate } = require('./lib/template-render');
+const xlsx = require('./lib/xlsx');
+const templates = createTemplates({ directory: config.storage.templateDir });
 // 预览访问计数：爬虫与带管理员会话 cookie 的打开单独计数，不算作访客。
 // 预览路由挂在 session 中间件之前，这里只看 cookie 是否存在（只有登录成功才会下发）。
 function hasAdminCookie(req) {
@@ -149,14 +155,7 @@ function mapItem(m) {
 
 // ---- 资源版本 ----
 // 同一资源的更新、删版本串行执行，避免两次更新拿到同一个版本号。
-const versionLocks = new Map();
-function withVersionLock(id, task) {
-  const run = (versionLocks.get(id) || Promise.resolve()).then(task);
-  const tail = run.catch(() => {});
-  versionLocks.set(id, tail);
-  tail.then(() => { if (versionLocks.get(id) === tail) versionLocks.delete(id); });
-  return run;
-}
+const withVersionLock = createLocks();
 
 function httpError(status, message) {
   const error = new Error(message);
@@ -276,6 +275,94 @@ function cleanupFailedUpload(req) {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// 更新目标的检查：只能更新自己的资源，类型不能变。返回 [状态码, 错误] 或 null。
+function updateProblem(account, id, type) {
+  if (!store.isValidId(id)) return [400, 'bad id'];
+  const target = store.readMeta(id);
+  if (!target) return [404, 'not found'];
+  if (target.source !== account.name) return [403, 'forbidden: not your resource'];
+  if (target.type !== type) return [400, `type mismatch: resource is ${target.type}, upload is ${type}`];
+  return null;
+}
+
+// 新资源的访问策略：默认需要访问码；body 可指定 access_mode / access_days
+async function accessPolicyFor(body) {
+  const mode = body.access_mode;
+  if (mode !== undefined && !['public', 'code'].includes(mode)) throw httpError(400, 'invalid access_mode');
+  const days = body.access_days === undefined ? config.access.defaultDays : Number(body.access_days);
+  if (!Number.isFinite(days) || days <= 0 || days > 3650) throw httpError(400, 'access_days must be 1-3650');
+  return mode === undefined && body.access_days === undefined
+    ? previewAccess.initialPolicy()
+    : previewAccess.update({}, { mode: mode || 'code', expiresAt: new Date(Date.now() + days * 86400000).toISOString() });
+}
+
+// 元数据里"当前版本用的模板与功能"跟随当前版本
+function templateFields(meta, entry) {
+  const next = { ...meta };
+  if (entry.template) next.template = entry.template; else delete next.template;
+  if (entry.features && Object.keys(entry.features).length) next.features = entry.features; else delete next.features;
+  return next;
+}
+
+function uploadResponse(meta, extra = {}) {
+  const site = meta.type === 'site';
+  return {
+    url: previewUrl(meta), id: meta.id, type: meta.type,
+    ...(site ? { fileCount: meta.fileCount, size: versions.find(meta, versions.current(meta)).size } : {}),
+    source: meta.source, description: meta.description, version: versions.current(meta),
+    ...(meta.template ? { template: { name: meta.template.name, version: meta.template.version } } : {}),
+    ...classification.normalize(meta), access: previewAccess.info(meta), ...extra,
+  };
+}
+
+/**
+ * 写入一个新资源或新版本。文件已经落在 store.fileDir(type, stagedId)。
+ * ctx: { account, type, stagedId, body, cleanup, labelDefaults }
+ * entry: 版本记录（filename、mime、size、createdAt、message、git、template、features…）
+ */
+async function saveResource(res, ctx, entry) {
+  const targetId = typeof ctx.body.id === 'string' ? ctx.body.id.trim() : '';
+  try {
+    const q = accounts.checkQuota(ctx.account, entry.size, { newResource: !targetId });
+    if (!q.ok) throw httpError(q.status || 429, q.error);
+    if (targetId) {
+      const problem = updateProblem(ctx.account, targetId, ctx.type);
+      if (problem) throw httpError(problem[0], problem[1]);
+      return await updateResource(res, ctx, targetId, entry);
+    }
+    const id = ctx.stagedId;
+    const created = await accessPolicyFor(ctx.body);
+    const storedPath = path.join(store.fileDir(ctx.type, id), entry.filename);
+    const meta = templateFields({
+      access: created.policy,
+      id,
+      type: ctx.type,
+      filename: entry.filename,
+      mime: entry.mime,
+      size: entry.size,
+      ...(ctx.type === 'site' ? { archiveName: entry.archiveName, fileCount: entry.fileCount } : {}),
+      source: ctx.account.name,
+      description: metadata.descriptionForUpload(storedPath, ctx.type, ctx.body.description),
+      ...classification.forUpload(storedPath, ctx.type, { ...(ctx.labelDefaults || {}), ...nonEmpty(ctx.body) }),
+      createdAt: entry.createdAt,
+      current: 1,
+      versions: [{ n: 1, ...entry }],
+    }, entry);
+    try { store.writeMeta(id, meta); } catch { throw httpError(500, 'unable to save upload metadata'); }
+    res.set('Cache-Control', 'no-store');
+    res.json(uploadResponse(meta, { updated: false, accessCode: created.code }));
+  } catch (error) {
+    ctx.cleanup();
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    console.error('[upload] save failed:', error.message);
+    res.status(500).json({ error: 'unable to save upload' });
+  }
+}
+
+function nonEmpty(body) {
+  return Object.fromEntries(Object.entries(body || {}).filter(([, value]) => value !== '' && value !== undefined && value !== null));
+}
+
 // ---- A. 上传接口 ----
 app.post('/upload', requireToken, (req, res) => {
   // 配额在文件落盘后检查：表单里的 id（更新已有资源）要等 multer 解析完才知道，更新不占文件数。
@@ -286,20 +373,25 @@ app.post('/upload', requireToken, (req, res) => {
       return res.status(400).json({ error: msg });
     }
     if (!req.file) return res.status(400).json({ error: 'no file (field name must be "file")' });
+    const fail = (status, error) => { cleanupFailedUpload(req); return res.status(status).json({ error }); };
 
-    // 带 id 表示更新这个资源：只能更新自己的，类型不能变
+    // 带 id 表示更新这个资源：先检查，避免白白解压站点
     const targetId = typeof req.body.id === 'string' ? req.body.id.trim() : '';
     if (targetId) {
-      const target = store.readMeta(targetId);
-      const problem = !store.isValidId(targetId) ? [400, 'bad id']
-        : !target ? [404, 'not found']
-          : target.source !== req.account.name ? [403, 'forbidden: not your resource']
-            : target.type !== req.uploadType ? [400, `type mismatch: resource is ${target.type}, upload is ${req.uploadType}`]
-              : null;
-      if (problem) {
-        cleanupFailedUpload(req);
-        return res.status(problem[0]).json({ error: problem[1] });
-      }
+      const problem = updateProblem(req.account, targetId, req.uploadType);
+      if (problem) return fail(problem[0], problem[1]);
+    }
+
+    // 自由排版的模板：只记录模板和默认分类，不改动上传的文件
+    let template = null;
+    const templateName = typeof req.body.template === 'string' ? req.body.template.trim() : '';
+    if (templateName) {
+      const found = templates.find(req.account, templateName);
+      if (!found) return fail(404, `template not found: ${templateName}`);
+      const manifest = templates.current(found).manifest;
+      if (manifest.layout) return fail(400, `template ${templateName} has a fixed layout; use dview render ${templateName} --data <file>`);
+      if (req.uploadType !== 'html' && req.uploadType !== 'site') return fail(400, 'templates apply to HTML pages and sites only');
+      template = { found, manifest };
     }
 
     // 站点：解压后按解压总大小计配额
@@ -321,77 +413,37 @@ app.post('/upload', requireToken, (req, res) => {
         fs.rmSync(incomingZip(req.uploadId), { force: true });
       }
     }
-    const uploadedSize = site ? site.size : req.file.size;
 
-    const q = accounts.checkQuota(req.account, uploadedSize, { newResource: !targetId });
-    if (!q.ok) {
-      cleanupFailedUpload(req);
-      return res.status(q.status || 429).json({ error: q.error });
-    }
-
-    const filename = site ? 'index.html' : safeFilename(req.file.originalname);
     const entry = {
-      filename,
+      filename: site ? 'index.html' : safeFilename(req.file.originalname),
       mime: site ? 'text/html' : req.file.mimetype,
-      size: uploadedSize,
+      size: site ? site.size : req.file.size,
       ...(site ? { archiveName: safeFilename(req.file.originalname), fileCount: site.fileCount } : {}),
       createdAt: new Date().toISOString(),
       ...versionNote(req.body),
+      ...(template ? { template: { id: template.found.id, name: template.found.name, version: template.found.current } } : {}),
     };
-    if (targetId) return updateResource(req, res, targetId, entry);
-
-    const id = req.uploadId;
-    let createdAccess;
-    try {
-      const mode = req.body.access_mode;
-      if (mode !== undefined && !['public', 'code'].includes(mode)) throw new Error('invalid access_mode');
-      const days = req.body.access_days === undefined ? config.access.defaultDays : Number(req.body.access_days);
-      if (!Number.isFinite(days) || days <= 0 || days > 3650) throw new Error('access_days must be 1-3650');
-      createdAccess = mode === undefined && req.body.access_days === undefined
-        ? await previewAccess.initialPolicy()
-        : await previewAccess.update({}, { mode: mode || 'code', expiresAt: new Date(Date.now() + days * 86400000).toISOString() });
-    } catch (error) {
-      cleanupFailedUpload(req);
-      return res.status(400).json({ error: error.message });
-    }
-    const storedPath = store.filePath({ id, type: req.uploadType, filename });
-    const meta = {
-      access: createdAccess.policy,
-      id,
+    saveResource(res, {
+      account: req.account,
       type: req.uploadType,
-      filename,
-      mime: entry.mime,
-      size: uploadedSize,
-      ...(site ? { archiveName: entry.archiveName, fileCount: site.fileCount } : {}),
-      source: req.uploadSource,
-      description: metadata.descriptionForUpload(storedPath, req.uploadType, req.body && req.body.description),
-      ...classification.forUpload(storedPath, req.uploadType, req.body || {}),
-      createdAt: entry.createdAt,
-      current: 1,
-      versions: [{ n: 1, ...entry }],
-    };
-    try {
-      store.writeMeta(id, meta);
-    } catch (error) {
-      cleanupFailedUpload(req);
-      return res.status(500).json({ error: 'unable to save upload metadata' });
-    }
-    res.set('Cache-Control', 'no-store');
-    res.json({ url: `${config.baseUrl}/v/${id}${site ? '/' : ''}`, id, type: meta.type, ...(site ? { fileCount: site.fileCount, size: site.size } : {}),
-      source: meta.source, description: meta.description, version: 1, updated: false,
-      ...classification.normalize(meta), access: previewAccess.info(meta), accessCode: createdAccess.code });
+      stagedId: req.uploadId,
+      body: req.body,
+      cleanup: () => cleanupFailedUpload(req),
+      labelDefaults: template ? { category: template.manifest.category, tags: template.manifest.tags } : null,
+    }, entry);
   });
 });
 
 // 更新已有资源：把本次上传（已落在临时 id 目录）整体移到 <资源目录>/.versions/<n>/，再写元数据。
 // 访问码、分类保持不变；只覆盖本次请求里出现的分类字段。描述原本取自页面标题时跟随新版本更新。
-async function updateResource(req, res, id, entry) {
-  const staged = store.fileDir(req.uploadType, req.uploadId);
+// 失败时抛出带 status 的错误，由 saveResource 清理临时目录。
+async function updateResource(res, ctx, id, entry) {
+  const staged = store.fileDir(ctx.type, ctx.stagedId);
   let placed = null;
   try {
     const updated = await withVersionLock(id, () => {
       const meta = store.readMeta(id);
-      if (!meta || meta.source !== req.account.name || meta.type !== req.uploadType) throw httpError(409, 'resource changed during upload');
+      if (!meta || meta.source !== ctx.account.name || meta.type !== ctx.type) throw httpError(409, 'resource changed during upload');
       const existing = versions.list(meta);
       const n = Math.max(...existing.map((item) => item.n)) + 1;
       if (n > versions.MAX_VERSION) throw httpError(409, 'too many versions');
@@ -403,17 +455,17 @@ async function updateResource(req, res, id, entry) {
       const { kept, removed } = versions.prune([...existing, { n, ...entry }], config.versions.maxPerResource, n);
       const patch = {};
       for (const field of classification.FIELDS) {
-        if (Object.prototype.hasOwnProperty.call(req.body, field)) patch[field] = req.body[field];
+        if (Object.prototype.hasOwnProperty.call(ctx.body, field)) patch[field] = ctx.body[field];
       }
       const newFile = path.join(dest, entry.filename);
       const oldTitle = metadata.descriptionFromFile(store.filePath(meta), meta.type);
       let description = meta.description;
-      if (Object.prototype.hasOwnProperty.call(req.body, 'description')) {
-        description = metadata.descriptionForUpload(newFile, meta.type, req.body.description);
+      if (Object.prototype.hasOwnProperty.call(ctx.body, 'description')) {
+        description = metadata.descriptionForUpload(newFile, meta.type, ctx.body.description);
       } else if (!meta.description || meta.description === oldTitle) {
         description = metadata.descriptionFromFile(newFile, meta.type) || meta.description;
       }
-      const next = {
+      const next = templateFields({
         ...meta,
         ...classification.applyPatch(meta, patch),
         filename: entry.filename,
@@ -424,7 +476,7 @@ async function updateResource(req, res, id, entry) {
         current: n,
         versions: kept,
         updatedAt: entry.createdAt,
-      };
+      }, entry);
       store.writeMeta(id, next);
       placed = null;
       for (const old of removed) fs.rmSync(store.versionDir(meta, old.n), { recursive: true, force: true });
@@ -433,17 +485,10 @@ async function updateResource(req, res, id, entry) {
     res.set('Cache-Control', 'no-store');
     // 固定链接始终显示最新版；versionUrl 是这一版的永久地址
     const versionUrl = `${config.baseUrl}/v/${id}/@${updated.current}${updated.type === 'site' ? '/' : ''}`;
-    res.json({ url: previewUrl(updated), versionUrl,
-      id, type: updated.type, version: updated.current, updated: true,
-      ...(updated.type === 'site' ? { fileCount: updated.fileCount, size: entry.size } : {}),
-      source: updated.source, description: updated.description,
-      ...classification.normalize(updated), access: previewAccess.info(updated) });
+    res.json(uploadResponse(updated, { updated: true, versionUrl }));
   } catch (error) {
     if (placed) fs.rmSync(placed, { recursive: true, force: true });
-    else cleanupFailedUpload(req);
-    if (error.status) return res.status(error.status).json({ error: error.message });
-    console.error('[upload] update failed:', error.message);
-    res.status(500).json({ error: 'unable to save new version' });
+    throw error;
   }
 }
 
@@ -507,6 +552,146 @@ app.delete('/api/me/items/:id', requireToken, (req, res) => {
   const ok = store.remove(id, 'owner');
   res.json({ ok });
 });
+
+// ---- A3. 页面模板（Bearer token）：自己的模板 + 全局模板 ----
+// 模板包和渲染数据可能较大，用单独的 JSON 解析器（全局的 express.json 在后面，默认 100 KB）。
+const TEMPLATE_DATA_FILE = '.dview-data.json';
+const parseTemplateJson = express.json({ limit: '8mb' });
+function templateJson(req, res, next) {
+  parseTemplateJson(req, res, (error) => {
+    if (!error) return next();
+    res.status(error.status || 400).json({ error: error.type === 'entity.too.large' ? 'request too large (max 8 MB)' : 'invalid JSON body' });
+  });
+}
+function templateFailure(res, error) {
+  if (error instanceof TemplateError || error.status) {
+    return res.status(error.status || 400).json({ error: error.message, ...(error.details ? { details: error.details } : {}) });
+  }
+  console.error('[templates]', error.message);
+  res.status(500).json({ error: 'template operation failed' });
+}
+function jsonBody(req) {
+  return req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+}
+
+app.get('/api/templates', requireToken, (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ templates: templates.list(req.account) });
+});
+app.get('/api/templates/match', requireToken, (req, res) => {
+  const q = typeof req.query.q === 'string' ? req.query.q.slice(0, 2000) : '';
+  res.set('Cache-Control', 'no-store');
+  res.json({ query: q, templates: templates.match(req.account, q) });
+});
+app.get('/api/templates/:name', requireToken, (req, res) => {
+  const found = templates.find(req.account, req.params.name);
+  if (!found) return res.status(404).json({ error: 'template not found' });
+  res.set('Cache-Control', 'no-store');
+  res.json(templates.detail(found, req.account));
+});
+app.get('/api/templates/:name/files', requireToken, (req, res) => {
+  const found = templates.find(req.account, req.params.name);
+  if (!found) return res.status(404).json({ error: 'template not found' });
+  res.set('Cache-Control', 'no-store');
+  res.json({ name: found.name, version: found.current, files: templates.readFiles(found) });
+});
+app.put('/api/templates/:name', requireToken, templateJson, async (req, res) => {
+  const body = jsonBody(req);
+  try {
+    const result = await templates.push(req.account, req.params.name, body.files, {
+      message: body.message,
+      global: typeof body.global === 'boolean' ? body.global : undefined,
+    });
+    res.json(result);
+  } catch (error) { templateFailure(res, error); }
+});
+app.delete('/api/templates/:name', requireToken, async (req, res) => {
+  try { res.json(await templates.remove(req.account, req.params.name)); } catch (error) { templateFailure(res, error); }
+});
+
+// 渲染并上传：校验数据 → 嵌入模板 → 和普通上传一样新建资源或生成新版本（body.id）。
+// dry_run 只返回 HTML，不保存。
+app.post('/api/templates/:name/render', requireToken, templateJson, (req, res) => {
+  const body = jsonBody(req);
+  const found = templates.find(req.account, req.params.name);
+  if (!found) return res.status(404).json({ error: 'template not found' });
+  const { manifest } = templates.current(found);
+  if (!manifest.layout) return res.status(400).json({ error: `template ${found.name} has no fixed layout; generate the HTML yourself and upload it with --template ${found.name}` });
+  if (!Object.prototype.hasOwnProperty.call(body, 'data')) return res.status(400).json({ error: 'data is required' });
+  const files = templates.readFiles(found);
+  const problems = templateSchema.validate(JSON.parse(files[manifest.schema]), body.data);
+  if (problems.length) return res.status(422).json({ error: 'data does not match the template schema', details: problems });
+  const { html, title } = renderTemplate({ layout: files[manifest.layout], data: body.data, pageTitle: manifest.pageTitle, features: manifest.features });
+  const ref = { id: found.id, name: found.name, version: found.current };
+  if (body.dry_run === true) {
+    res.set('Cache-Control', 'no-store');
+    return res.json({ html, title, template: ref });
+  }
+  const targetId = typeof body.id === 'string' ? body.id.trim() : '';
+  if (targetId) {
+    const problem = updateProblem(req.account, targetId, 'html');
+    if (problem) return res.status(problem[0]).json({ error: problem[1] });
+  }
+  // 页面和数据一起落在临时目录，之后和普通上传走同一条路径
+  const stagedId = store.newId();
+  const dir = store.fileDir('html', stagedId);
+  const filename = `${found.name}.html`;
+  const dataText = JSON.stringify(body.data);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, filename), html);
+    fs.writeFileSync(path.join(dir, TEMPLATE_DATA_FILE), dataText);
+  } catch (error) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    return templateFailure(res, error);
+  }
+  const fields = { ...body };
+  delete fields.data;
+  delete fields.dry_run;
+  delete fields.template;
+  saveResource(res, {
+    account: req.account,
+    type: 'html',
+    stagedId,
+    body: Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, typeof value === 'number' || typeof value === 'boolean' ? String(value) : value])),
+    cleanup: () => fs.rmSync(dir, { recursive: true, force: true }),
+    labelDefaults: { category: manifest.category, tags: manifest.tags },
+  }, {
+    filename,
+    mime: 'text/html',
+    size: Buffer.byteLength(html) + Buffer.byteLength(dataText),
+    createdAt: new Date().toISOString(),
+    ...versionNote(body),
+    template: ref,
+    features: manifest.features,
+  });
+});
+
+// 导出 Excel：用这一版保存的数据和功能配置生成，和页面上"导出 Excel"得到的文件相同。
+function exportXlsx(req, res) {
+  const meta = store.readMeta(req.params.id);
+  if (!meta) return res.status(404).json({ error: 'not found' });
+  if (req.account && req.account.name !== meta.source) return res.status(403).json({ error: 'forbidden: not your resource' });
+  const n = req.query.version === undefined ? versions.current(meta)
+    : /^[1-9]\d{0,5}$/.test(String(req.query.version)) ? Number(req.query.version) : null;
+  const entry = n === null ? null : versions.find(meta, n);
+  if (!entry) return res.status(404).json({ error: 'version not found' });
+  const spec = entry.features && entry.features.export && entry.features.export.xlsx;
+  if (!spec) return res.status(409).json({ error: 'this page has no Excel export' });
+  let data;
+  try { data = JSON.parse(fs.readFileSync(path.join(store.versionDir(meta, n), TEMPLATE_DATA_FILE), 'utf8')); } catch {
+    return res.status(409).json({ error: 'page data is missing' });
+  }
+  const bytes = xlsx.buildXlsx(xlsx.exportTable(data, spec));
+  const name = String(meta.description || meta.id).replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').slice(0, 120) + '.xlsx';
+  res.set({
+    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'Content-Disposition': `attachment; filename="export.xlsx"; filename*=UTF-8''${encodeURIComponent(name)}`,
+    'Cache-Control': 'no-store',
+  });
+  res.send(Buffer.from(bytes));
+}
+app.get('/api/me/items/:id/export.xlsx', requireToken, exportXlsx);
 
 // ---- B. 预览接口：访问验证在直出与 sidecar 代理前统一执行 ----
 app.post('/v/:id/unlock', express.urlencoded({ extended: false, limit: '4kb' }), previewAccess.unlock);
@@ -799,6 +984,18 @@ app.get('/admin/api/list', requireAdmin, (req, res) => {
   });
 });
 
+app.get('/admin/api/item/:id/export.xlsx', requireAdmin, exportXlsx);
+
+// 模板（管理员）：查看全部模板，设为全局或取消。管理页下一轮加。
+app.get('/admin/api/templates', requireAdmin, (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ templates: templates.adminList() });
+});
+app.patch('/admin/api/templates/:id', requireAdmin, requireSameOrigin, async (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  if (typeof body.global !== 'boolean') return res.status(400).json({ error: 'global must be true or false' });
+  try { res.json(await templates.setGlobal(req.params.id, body.global)); } catch (error) { templateFailure(res, error); }
+});
 app.get('/admin/api/item/:id/versions', requireAdmin, listVersions);
 app.delete('/admin/api/item/:id/versions/:n', requireAdmin, requireSameOrigin, deleteVersion);
 

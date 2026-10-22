@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "required": ["vendor", "customer", "period", "items"],
+  "properties": {
+    "vendor": { "type": "string", "title": "出账方", "minLength": 1, "maxLength": 80 },
+    "customer": { "type": "string", "title": "客户", "minLength": 1, "maxLength": 80 },
+    "period": { "type": "string", "title": "账期", "description": "如 2026-10", "minLength": 1, "maxLength": 40 },
+    "billNo": { "type": "string", "title": "账单编号", "maxLength": 60 },
+    "issueDate": { "type": "string", "title": "出账日期", "description": "YYYY-MM-DD", "maxLength": 20 },
+    "currency": { "type": "string", "title": "币种符号", "description": "默认 ¥", "maxLength": 8 },
+    "taxRate": { "type": "number", "title": "税率", "description": "小数，如 0.06 表示 6%；不填则不计税", "minimum": 0, "maximum": 1 },
+    "items": {
+      "type": "array",
+      "title": "明细",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "required": ["name", "qty", "price"],
+        "properties": {
+          "name": { "type": "string", "title": "项目", "minLength": 1, "maxLength": 120 },
+          "unit": { "type": "string", "title": "单位", "maxLength": 20 },
+          "qty": { "type": "number", "title": "数量", "minimum": 0 },
+          "price": { "type": "number", "title": "单价（不含税）" }
+        }
+      }
+    },
+    "notes": { "type": "string", "title": "备注", "description": "纯文本，换行会保留", "maxLength": 2000 }
+  }
+}

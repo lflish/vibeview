@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>账单</title>
+<style>
+  :root { --bg: #f6f8fb; --surface: #fff; --text: #1e293b; --muted: #64748b; --line: #e2e8f0; --accent: #2563eb; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.6 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  main { max-width: 860px; margin: 32px auto; padding: 40px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+  header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; padding-bottom: 20px; border-bottom: 2px solid var(--accent); }
+  h1 { margin: 0 0 4px; font-size: 24px; }
+  .vendor { color: var(--muted); }
+  .meta { display: grid; grid-template-columns: auto auto; gap: 2px 14px; font-size: 13px; }
+  .meta dt { color: var(--muted); }
+  .meta dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  .to { margin: 22px 0 14px; }
+  .to span { color: var(--muted); margin-right: 8px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; font-size: 12.5px; }
+  td.name { white-space: normal; }
+  .num { text-align: right; }
+  .totals { margin: 18px 0 0 auto; width: min(320px, 100%); font-variant-numeric: tabular-nums; }
+  .totals div { display: flex; justify-content: space-between; padding: 5px 0; }
+  .totals .grand { margin-top: 6px; padding-top: 10px; border-top: 2px solid var(--text); font-size: 18px; font-weight: 700; }
+  .notes { margin-top: 28px; padding: 14px 16px; background: var(--bg); border-radius: 10px; white-space: pre-line; color: var(--muted); }
+  .notes:empty { display: none; }
+  @media (max-width: 640px) { main { margin: 0; padding: 20px 16px 72px; border: 0; border-radius: 0; } }
+  @media print { body { background: #fff; } main { margin: 0; border: 0; padding: 0; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1 id="title">账单</h1>
+      <div class="vendor" id="vendor"></div>
+    </div>
+    <dl class="meta">
+      <dt>账期</dt><dd id="period"></dd>
+      <dt>账单编号</dt><dd id="billNo">—</dd>
+      <dt>出账日期</dt><dd id="issueDate">—</dd>
+    </dl>
+  </header>
+  <p class="to"><span>客户</span><strong id="customer"></strong></p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>#</th><th>项目</th><th>单位</th><th class="num">数量</th><th class="num">单价</th><th class="num">金额</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <section class="totals">
+    <div><span>小计</span><span id="subtotal"></span></div>
+    <div id="taxRow"><span id="taxLabel">税额</span><span id="tax"></span></div>
+    <div class="grand"><span>合计</span><span id="total"></span></div>
+  </section>
+  <div class="notes" id="notes"></div>
+</main>
+<script>
+  // 数据由 vibeview 注入：window.DVIEW_DATA。所有文本都用 textContent，不当作 HTML。
+  (function () {
+    var d = window.DVIEW_DATA;
+    var cur = d.currency || '¥';
+    var round = function (n) { return Math.round(n * 100) / 100; };
+    var money = function (n) { return cur + round(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+    var set = function (id, value) { if (value !== undefined && value !== null && value !== '') document.getElementById(id).textContent = value; };
+    set('title', d.period + ' 账单');
+    set('vendor', d.vendor);
+    set('period', d.period);
+    set('billNo', d.billNo);
+    set('issueDate', d.issueDate);
+    set('customer', d.customer);
+    set('notes', d.notes);
+    var subtotal = 0;
+    var rows = document.getElementById('rows');
+    d.items.forEach(function (item, i) {
+      var amount = item.qty * item.price;
+      subtotal += amount;
+      var tr = document.createElement('tr');
+      [String(i + 1), item.name, item.unit || '', String(item.qty), money(item.price), money(amount)].forEach(function (value, c) {
+        var td = document.createElement('td');
+        td.textContent = value;
+        if (c === 1) td.className = 'name';
+        if (c >= 3) td.className = 'num';
+        tr.appendChild(td);
+      });
+      rows.appendChild(tr);
+    });
+    var rate = typeof d.taxRate === 'number' ? d.taxRate : 0;
+    var tax = round(subtotal) * rate;
+    set('subtotal', money(subtotal));
+    if (rate) {
+      set('taxLabel', '税额（' + round(rate * 100) + '%）');
+      set('tax', money(tax));
+    } else {
+      document.getElementById('taxRow').hidden = true;
+    }
+    set('total', money(round(subtotal) + round(tax)));
+  })();
+</script>
+</body>
+</html>

@@ -146,6 +146,40 @@ curl -fsS -X POST "${DVIEW_URL%/}/upload" -H "Authorization: Bearer $DVIEW_TOKEN
   -F "id=Ab3xK9mP2qR7sT1v" -F "message=Add error messages" -F "file=@./login.html"
 ```
 
+### Page templates
+
+Pages with a fixed format that you generate again and again, such as bills and reports, can become templates: tune the layout once, then supply only data, and the same data always produces the same page. A template can also add platform features to its pages, such as printing and Excel export.
+
+```bash
+dview template push examples/templates/vendor-bill   # Publish (publishing again adds a version)
+dview template match "bill ACME for October"          # Find templates by keyword
+dview template show vendor-bill                       # Fields, example data, and guide
+dview render vendor-bill --data bills/acme-2026-10.json -m "Add line items"   # Render and upload
+dview render vendor-bill --data bills/acme-2026-10.json --out page.html       # Render locally only
+dview upload prd.html --template prd-review           # Free-layout template
+dview template pull vendor-bill ./my-bill             # Download to edit
+dview template list / delete <name>
+```
+
+`examples/templates/vendor-bill/` is a complete example to copy and adapt. A template directory contains:
+
+| File | Purpose |
+| --- | --- |
+| `template.json` | Name, description, trigger keywords (`match`), default category and tags, page title (`pageTitle`, such as `"{vendor} {period} bill"`), and `features` |
+| `layout.html` | The fixed layout, a self-contained HTML file. Data is in `window.DVIEW_DATA`; display it with `textContent` and compute totals in the page script |
+| `schema.json` | Data structure using the JSON Schema keywords `type`, `properties`, `required`, `items`, `enum`, `minItems`/`maxItems`, `minimum`/`maximum`, and `minLength`/`maxLength` |
+| `example.json` | Example data, used to check the template when it is published |
+| `guide.md` | Instructions for agents, shown by `dview template show` |
+
+A template without `layout` is a **free-layout** template: the agent generates the HTML and uploads it with `--template <name>`; the page gets the template's category and tags, and the guide says how to write it.
+
+- **Rendering**: the server checks the data against `schema.json` and lists every problem instead of producing a page. Data is embedded in the page as JSON with `<`, `>`, and `&` escaped, so HTML in the data only ever shows as text. The same template version and data always produce byte-identical pages.
+- **Rendered pages** are ordinary HTML resources: they have an access code and can be updated in place with `--id` or `.dview.json`. For `render`, `.dview.json` is keyed by the **data file** path.
+- **Features**: `"print": true` adds a Print button at the top right (bottom right on phones); `"export": {"xlsx": {...}}` adds an Export Excel button that builds the `.xlsx` in the browser from the page data. Columns are fields or products of fields (amount = quantity × price), with an optional totals row. The buttons are hidden when printing. Only pages with these features get the extra sandbox permissions for print dialogs and downloads. Agents and scripts can fetch the same file from `GET /api/me/items/:id/export.xlsx`.
+- **Versions**: each `push` adds a template version; the latest 50 are kept, and each account can have up to 100 templates. Rendered pages do not change with the template and still open and export after it is deleted; rendering again uses the latest version.
+- **Global templates**: a template is private to the account that published it. Accounts with `global_templates: true` in `config.yaml` can publish to everyone with `dview template push <dir> --global`; administrators can toggle it with `PATCH /admin/api/templates/:id`. Lookups by name prefer your own template over a global one with the same name.
+- **Matching**: a template matches when any of its keywords appears in the request (ignoring case and full-width forms), ranked by how many keywords match.
+
 ### Categories, projects, and tags
 
 Each resource can record what kind of page it is, which project it belongs to, and which agent produced it, so large collections stay easy to filter:
@@ -347,6 +381,14 @@ For `NET::ERR_CERT_DATE_INVALID`, check the validity of the certificate actually
 | `PATCH /api/me/items/:id/meta` | Bearer upload token | Change category, project, agent, model, tags, or description of this account's resource |
 | `GET /api/me/items/:id/versions` | Bearer upload token | List versions of this account's resource |
 | `DELETE /api/me/items/:id/versions/:n` | Bearer upload token | Delete a past version (version 1 and the current version cannot be deleted) |
+| `GET /api/me/items/:id/export.xlsx` | Bearer upload token | Excel export of a template page; optional `?version=n` |
+| `GET /api/templates` | Bearer upload token | Templates you can use (your own and global ones) |
+| `GET /api/templates/match?q=` | Bearer upload token | Match templates by keyword |
+| `GET /api/templates/:name` | Bearer upload token | Template details: fields, example data, guide, versions |
+| `GET /api/templates/:name/files` | Bearer upload token | All files of the current template version |
+| `PUT /api/templates/:name` | Bearer upload token | Publish, JSON `{"files":{"template.json":"…"},"message":"…","global":true}` |
+| `DELETE /api/templates/:name` | Bearer upload token | Delete your own template |
+| `POST /api/templates/:name/render` | Bearer upload token | Render and upload, JSON `{"data":{…},"id":"…","message":"…","dry_run":true}`; other fields as for uploads |
 | `GET /v/:id` | Public, or a verified preview cookie | Show the preview; show the code form when unauthorized |
 | `POST /v/:id/unlock` | Form field `code` | Verify a code and set a preview cookie |
 | `GET /v/:id/raw` | Same as the preview | Retrieve the original file; supports Range requests |
@@ -361,6 +403,9 @@ For `NET::ERR_CERT_DATE_INVALID`, check the validity of the certificate actually
 | `PATCH /admin/api/item/:id/meta` | Administrator session | Change category, project, agent, model, tags, or description |
 | `PATCH /admin/api/items/meta` | Administrator session | Bulk relabel with `{"ids":[...],"category":"report","project":"x","addTags":"q3"}`, up to 100 items; omitted fields stay unchanged and tags are appended |
 | `GET /admin/api/item/:id/versions` | Administrator session | List versions |
+| `GET /admin/api/item/:id/export.xlsx` | Administrator session | Excel export of a template page |
+| `GET /admin/api/templates` | Administrator session | All templates |
+| `PATCH /admin/api/templates/:id` | Administrator session | Make a template global or private, JSON `{"global":true}` |
 | `DELETE /admin/api/item/:id/versions/:n` | Administrator session | Delete a past version |
 | `DELETE /admin/api/item/:id` | Administrator session | Delete a resource and all its versions |
 | `DELETE /admin/api/items` | Administrator session | Bulk deletion; JSON `{"ids":["id1","id2"]}`, up to 100 items |

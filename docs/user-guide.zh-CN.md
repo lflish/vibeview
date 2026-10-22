@@ -146,6 +146,40 @@ curl -fsS -X POST "${DVIEW_URL%/}/upload" -H "Authorization: Bearer $DVIEW_TOKEN
   -F "id=Ab3xK9mP2qR7sT1v" -F "message=补充错误提示" -F "file=@./login.html"
 ```
 
+### 页面模板
+
+账单、报表这类格式固定、反复生成的页面，可以做成模板：调好一次排版，之后只提供数据，同样的数据每次生成的页面完全一样。模板还能给页面加上平台功能，比如打印和导出 Excel。
+
+```bash
+dview template push examples/templates/vendor-bill   # 发布模板（再次发布生成新版本）
+dview template match "给 ACME 出 10 月账单"            # 按关键词找模板
+dview template show vendor-bill                       # 字段、示例数据和说明
+dview render vendor-bill --data bills/acme-2026-10.json -m "补充明细"   # 生成并上传
+dview render vendor-bill --data bills/acme-2026-10.json --out page.html # 只在本地生成
+dview upload prd.html --template prd-review           # 自由排版的模板
+dview template pull vendor-bill ./my-bill             # 下载到本地修改
+dview template list / delete <name>
+```
+
+`examples/templates/vendor-bill/` 是一个完整的示例，可以复制后修改。一个模板目录包含：
+
+| 文件 | 说明 |
+| --- | --- |
+| `template.json` | 名称、说明、触发关键词（`match`）、默认分类和标签、页面标题（`pageTitle`，如 `"{vendor} {period} 账单"`）、功能（`features`） |
+| `layout.html` | 固定排版，自包含的单个 HTML。数据在 `window.DVIEW_DATA` 里，用 `textContent` 显示，合计等计算写在页面脚本里 |
+| `schema.json` | 数据结构，支持 JSON Schema 的 `type`、`properties`、`required`、`items`、`enum`、`minItems`/`maxItems`、`minimum`/`maximum`、`minLength`/`maxLength` |
+| `example.json` | 示例数据，发布时用它校验模板 |
+| `guide.md` | 给 agent 的说明，`dview template show` 会显示 |
+
+没有 `layout` 的模板是**自由排版**：agent 自己生成 HTML，上传时加 `--template <name>`，页面带上模板的分类和标签，模板的 guide 用来约定怎么写。
+
+- **渲染**：服务端按 `schema.json` 校验数据，不合格时逐条列出字段，不生成页面。数据以 JSON 嵌入页面，`<`、`>`、`&` 都会转义，数据里的 HTML 只会显示为文本。同一模板版本加同一份数据，生成的页面逐字节相同。
+- **生成的页面**是普通的 HTML 资源：同样有访问码，可以用 `--id` 或 `.dview.json` 更新同一个链接。`render` 的 `.dview.json` 以**数据文件**的路径为键。
+- **功能**：`"print": true` 在页面右上角（手机上在右下角）加"打印"按钮；`"export": {"xlsx": {...}}` 加"导出 Excel"按钮，在浏览器里用页面数据生成 `.xlsx`，列可以是字段，也可以是几个字段相乘（如金额 = 数量 × 单价），并可加合计行。打印时按钮自动隐藏。只有开了这些功能的页面，沙箱才额外允许打印弹窗和下载。agent 和脚本可以用 `GET /api/me/items/:id/export.xlsx` 得到同样的文件。
+- **版本**：每次 `push` 生成模板的新版本，保留最近 50 个；每个账户最多 100 个模板。已生成的页面不随模板改动，删除模板后也照常打开和导出；再次渲染时使用模板的最新版本。
+- **全局模板**：模板默认只有发布它的账户能用。在 `config.yaml` 里给账户加上 `global_templates: true` 后，可以用 `dview template push <dir> --global` 发布给所有账户；管理员也可以用 `PATCH /admin/api/templates/:id` 切换。按名称查找时，自己的模板优先于同名的全局模板。
+- **匹配**：用户原话里出现模板的任一关键词即命中（不区分大小写和全角半角），按命中的关键词数量排序。
+
 ### 分类、项目与标签
 
 每个资源可以记录「这是什么页面、属于哪个项目、由哪个 agent 生成」，便于在资源很多时筛选和整理：
@@ -348,6 +382,14 @@ npm start
 | `PATCH /api/me/items/:id/meta` | Bearer 上传 token | 修改本账户资源的分类、项目、agent、模型、标签或简介 |
 | `GET /api/me/items/:id/versions` | Bearer 上传 token | 本账户资源的版本列表 |
 | `DELETE /api/me/items/:id/versions/:n` | Bearer 上传 token | 删除一个历史版本（第 1 版和当前版本不能删） |
+| `GET /api/me/items/:id/export.xlsx` | Bearer 上传 token | 导出模板页面的 Excel，可加 `?version=n` |
+| `GET /api/templates` | Bearer 上传 token | 可用的模板（自己的和全局的） |
+| `GET /api/templates/match?q=` | Bearer 上传 token | 按关键词匹配模板 |
+| `GET /api/templates/:name` | Bearer 上传 token | 模板详情：字段、示例数据、说明、版本 |
+| `GET /api/templates/:name/files` | Bearer 上传 token | 模板当前版本的全部文件 |
+| `PUT /api/templates/:name` | Bearer 上传 token | 发布模板，JSON 为 `{"files":{"template.json":"…"},"message":"…","global":true}` |
+| `DELETE /api/templates/:name` | Bearer 上传 token | 删除自己的模板 |
+| `POST /api/templates/:name/render` | Bearer 上传 token | 渲染并上传，JSON 为 `{"data":{…},"id":"…","message":"…","dry_run":true}`，其余字段同上传 |
 | `GET /v/:id` | 公开，或已验证的预览 cookie | 预览页面；未授权时显示访问码表单 |
 | `POST /v/:id/unlock` | 表单中的 `code` | 验证访问码并设置预览 cookie |
 | `GET /v/:id/raw` | 与预览页相同 | 获取原文件，支持 Range 请求 |
@@ -362,6 +404,9 @@ npm start
 | `PATCH /admin/api/item/:id/meta` | 管理员 session | 修改分类、项目、agent、模型、标签或简介 |
 | `PATCH /admin/api/items/meta` | 管理员 session | 批量整理，JSON 为 `{"ids":[...],"category":"report","project":"x","addTags":"q3"}`，最多 100 条；未给出的字段保持不变，标签为追加 |
 | `GET /admin/api/item/:id/versions` | 管理员 session | 版本列表 |
+| `GET /admin/api/item/:id/export.xlsx` | 管理员 session | 导出模板页面的 Excel |
+| `GET /admin/api/templates` | 管理员 session | 全部模板 |
+| `PATCH /admin/api/templates/:id` | 管理员 session | 设为全局或取消，JSON 为 `{"global":true}` |
 | `DELETE /admin/api/item/:id/versions/:n` | 管理员 session | 删除一个历史版本 |
 | `DELETE /admin/api/item/:id` | 管理员 session | 删除单条资源及其所有版本 |
 | `DELETE /admin/api/items` | 管理员 session | 批量删除，JSON 为 `{"ids":["id1","id2"]}`，最多 100 条 |

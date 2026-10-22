@@ -1,0 +1,29 @@
+{
+  "name": "vendor-bill",
+  "title": "供应商月度账单",
+  "description": "给供应商或客户出的月度对账单：明细、小计、税额和合计，可打印、导出 Excel",
+  "match": ["账单", "对账单", "结算单", "invoice", "bill"],
+  "category": "report",
+  "tags": ["bill"],
+  "layout": "layout.html",
+  "schema": "schema.json",
+  "example": "example.json",
+  "guide": "guide.md",
+  "pageTitle": "{vendor} {period} 账单 · {customer}",
+  "features": {
+    "print": true,
+    "export": {
+      "xlsx": {
+        "sheet": "明细",
+        "rows": "items",
+        "columns": [
+          { "field": "name", "header": "项目" },
+          { "field": "unit", "header": "单位" },
+          { "field": "qty", "header": "数量" },
+          { "field": "price", "header": "单价" },
+          { "header": "金额", "product": ["qty", "price"], "total": true }
+        ]
+      }
+    }
+  }
+}
