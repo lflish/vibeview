@@ -1,5 +1,11 @@
 # Agent notes — vibeview
 
+## Specs
+
+Feature requirements live in [docs/specs/](docs/specs/README.md), one file per feature with a status line.
+When a requirement changes, update its spec first, then implement against it. Only start implementing a
+spec whose status is “已确认” or later; record scope changes under its 变更记录.
+
 ## Release and deployment skills
 
 - [release](.agents/skills/release/SKILL.md): cut a version — checks, version bump, bilingual notes,
