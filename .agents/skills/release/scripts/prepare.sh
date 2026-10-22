@@ -41,4 +41,14 @@ echo
 echo "== 发布说明素材：${last:-首个版本} 以来的提交 =="
 git log --no-merges --format='- %s (%h)' ${last:+"$last"..}HEAD^
 echo
+echo "== 本版新增或改动的需求说明（发布说明的「需求说明」一节要逐个链接到 blob/$tag/...） =="
+specs="$(git diff --name-only --diff-filter=AM ${last:+"$last"} HEAD -- 'docs/specs/*.md' | grep -v '/README\.md$' || true)"
+if [[ -n "$specs" ]]; then
+  while read -r spec; do
+    printf -- '- %s：%s\n' "$spec" "$(grep -m1 '^状态：' "$spec" | sed 's/^状态：//' || true)"
+  done <<<"$specs"
+else
+  echo "（没有）"
+fi
+echo
 echo "下一步：写发布说明 → git push origin main → 等 CI 通过 → publish.sh $version <说明文件>"

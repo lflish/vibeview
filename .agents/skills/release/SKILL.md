@@ -20,8 +20,9 @@ description: 给 vibeview 出一个新版本：检查、确定版本号、写中
 ## 流程
 
 1. **准备**：`bash .agents/skills/release/scripts/prepare.sh <X.Y.Z>`。它检查：在 main 分支上、工作区干净、和 origin 同步、tag 没用过、新版本大于当前版本、`gh` 已登录、敏感信息扫描通过；然后改 `package.json` 和锁文件的版本，并在本地提交 `chore(release): vX.Y.Z`，最后打印上个 tag 以来的提交作为发布说明素材。任何一项失败就停下，告诉用户原因。
-2. **写发布说明**：写到仓库外的临时文件（如 scratchpad），格式沿用已有 Release（`gh release view <上个 tag>` 查看）：中文在前、英文在后，分「安全修复 / 新功能 / 改进 / 升级 / 验证」等小节，没有的小节省略。
+2. **写发布说明**：写到仓库外的临时文件（如 scratchpad），格式沿用已有 Release（`gh release view <上个 tag>` 查看）：中文在前、英文在后，分「需求说明 / 安全修复 / 新功能 / 改进 / 升级 / 验证」等小节，没有的小节省略。
    - 写给使用者看：说明改了什么、有什么影响，不要照抄提交信息。
+   - **需求说明**：本版新增或改动过 `docs/specs/` 里的 spec 时（`prepare.sh` 会列出），在「新功能」前加「### 需求说明」一节（英文部分为「### Specifications」），每个 spec 一行：名称、状态（已实现 / 部分实现 / 只有需求说明）、一句话说明，链接写成 `https://github.com/<仓库>/blob/vX.Y.Z/docs/specs/<文件>`，固定在本版 tag 上，以后 spec 再改也能看到发版时的内容。实现时和 spec 不一样的地方（spec 的「变更记录」）在这里简要说明。`publish.sh` 会检查这一节和每个链接。
    - 「升级」写清需要手动做的事：新配置项、数据格式变化、需要重建 sidecar 等。
    - 「验证」写实际跑过的测试和 CI 结果，不写没做的验证。部署状态不写进 Release（Release 与部署无关）。
    - 不写真实主机、IP、用户名、目录或内部域名。
