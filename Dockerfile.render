@@ -8,7 +8,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY render-server.js ./
-COPY lib/viewer.js lib/preview-store.js lib/preview-routes.js ./lib/
+COPY lib/viewer.js lib/preview-store.js lib/preview-routes.js lib/versions.js ./lib/
 
 # 非 root
 USER node

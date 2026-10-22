@@ -120,6 +120,32 @@ curl -fsS -X POST "${DVIEW_URL%/}/upload" \
 
 **Access protection:** a visitor enters the access code once, on any page, and can then browse the whole site; after verification they return to the page they opened. Site pages run in a browser sandbox, where subrequests for styles, module scripts, and `fetch` carry no cookies. So after verification the visitor is redirected to a URL with a short-lived credential, `/v/<id>/~<credential>/...`, which relative links inside the site carry automatically. The credential is bound to the site and the current access-code version and expires with the preview grant (30 minutes by default). Resetting the code, changing its validity, or restarting the main service revokes it, and visitors must verify again. Because the credential is visible in the address bar, share the URL returned by the upload rather than the one in the browser.
 
+### Updates and versions
+
+Pages that change over time, such as requirements and prototypes, can keep one link: each update creates a new version, the link and access code stay the same, and the link you already shared always opens the latest content.
+
+```bash
+dview upload docs/prd/login.html                              # First time: creates it and writes .dview.json
+dview upload docs/prd/login.html -m "Add error messages"     # Same path again: updates the link as version 2
+dview upload ./dist --id Ab3xK9mP2qR7sT1v -m "Fix styles"    # Update a specific resource
+dview versions Ab3xK9mP2qR7sT1v                               # List versions
+```
+
+- **`.dview.json`**: inside a git repository, the CLI records "file path (relative to the repository root) → resource id" in `.dview.json` at the root, and later uploads of the same path update that resource. Commit it so other machines and agents update the same link. Files outside the repository and files ignored by `.gitignore` are not recorded. `--new` forces a new resource and rewrites the mapping; `--no-map` neither reads nor writes it. If the mapped resource was deleted or belongs to another account, the CLI stops with an error instead of creating a new one.
+- **Notes and commits**: `-m` describes the change. Inside a git repository the current commit is recorded, and the version is flagged when the uploaded file has uncommitted changes.
+- **History**: version n is at `/v/<id>/@<n>` (`/v/<id>/@<n>/` for sites) and opens with the same access code. A site cannot have a top-level directory named `@<number>`.
+- **Retention and quota**: each resource keeps at most `versions.max_per_resource` versions (default 50); the oldest are removed first, and version 1 and the current version are always kept. The resource size and the account's storage quota count all kept versions; updates do not count toward the file limit. With `storage.retention_days`, age is measured from the last update.
+- **What stays the same**: the access code, category, project, and tags carry over; only fields present in the request override them. A description taken from the page title follows the new version; one set by hand is kept.
+- **Same type only**: HTML updates HTML, a site updates a site, and only resources of your own account can be updated.
+- The admin UI shows the version next to the name (such as `v3`); "⋯ → Version history" opens or deletes past versions.
+
+With curl, add an `id` field and optionally `message`:
+
+```bash
+curl -fsS -X POST "${DVIEW_URL%/}/upload" -H "Authorization: Bearer $DVIEW_TOKEN" \
+  -F "id=Ab3xK9mP2qR7sT1v" -F "message=Add error messages" -F "file=@./login.html"
+```
+
 ### Categories, projects, and tags
 
 Each resource can record what kind of page it is, which project it belongs to, and which agent produced it, so large collections stay easy to filter:
@@ -319,9 +345,12 @@ For `NET::ERR_CERT_DATE_INVALID`, check the validity of the certificate actually
 | `DELETE /api/me/items/:id` | Bearer upload token | Delete this account's resource |
 | `PATCH /api/me/items/:id/access` | Bearer upload token | Change protection for this account's resource |
 | `PATCH /api/me/items/:id/meta` | Bearer upload token | Change category, project, agent, model, tags, or description of this account's resource |
+| `GET /api/me/items/:id/versions` | Bearer upload token | List versions of this account's resource |
+| `DELETE /api/me/items/:id/versions/:n` | Bearer upload token | Delete a past version (version 1 and the current version cannot be deleted) |
 | `GET /v/:id` | Public, or a verified preview cookie | Show the preview; show the code form when unauthorized |
 | `POST /v/:id/unlock` | Form field `code` | Verify a code and set a preview cookie |
 | `GET /v/:id/raw` | Same as the preview | Retrieve the original file; supports Range requests |
+| `GET /v/:id/@:n`, `/v/:id/@:n/raw`, `/v/:id/@:n/<path>` | Same as the preview | Page, original file, or site content of version n |
 | `GET /v/:id/<path>` | Public sites directly; protected sites via `/v/:id/~<credential>/<path>` | Pages and assets of a multi-page site; unverified pages show the access-code form |
 | `GET /admin/api/statistics` | Admin session | Summary, trends, calendar, breakdowns, and activity |
 | `GET /admin/api/statistics/day` | Admin session | Paginated upload events for one day |
@@ -331,7 +360,9 @@ For `NET::ERR_CERT_DATE_INVALID`, check the validity of the certificate actually
 | `GET /admin/api/item/:id/access-code` | Administrator session | Read the current code; `409` when public or not readable |
 | `PATCH /admin/api/item/:id/meta` | Administrator session | Change category, project, agent, model, tags, or description |
 | `PATCH /admin/api/items/meta` | Administrator session | Bulk relabel with `{"ids":[...],"category":"report","project":"x","addTags":"q3"}`, up to 100 items; omitted fields stay unchanged and tags are appended |
-| `DELETE /admin/api/item/:id` | Administrator session | Delete a resource |
+| `GET /admin/api/item/:id/versions` | Administrator session | List versions |
+| `DELETE /admin/api/item/:id/versions/:n` | Administrator session | Delete a past version |
+| `DELETE /admin/api/item/:id` | Administrator session | Delete a resource and all its versions |
 | `DELETE /admin/api/items` | Administrator session | Bulk deletion; JSON `{"ids":["id1","id2"]}`, up to 100 items |
 | `GET /admin/api/accounts` | Administrator session | Accounts and usage |
 | `POST /admin/api/accounts/:name/disable` or `/enable` | Administrator session | Disable or enable an account |

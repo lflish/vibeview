@@ -55,6 +55,12 @@ curl -fsS -X POST "$DVIEW_URL/upload" \
 
 Parse JSON field `url` and show it to the user.
 
+Pages that change over time (requirements, prototypes) should keep one link. Inside a git repository,
+`dview upload` records `path → id` in `.dview.json` at the repository root; uploading the same path again
+creates a new version at the same URL with the same access code. Add `-m "what changed"` to each update,
+commit `.dview.json`, use `--id <id>` to update a specific resource, and `--new` to force a new one.
+Version history: `dview versions <id>`; version `n` is at `/v/<id>/@<n>`.
+
 Choose a mode before generating a page. Use a **single self-contained HTML file** by default.
 Use a **multi-page site** only when the work needs two or more pages that link to each other, separate
 asset files (images, data, fonts), is a front-end build (`dist/`), or would exceed about 1 MB as one file.

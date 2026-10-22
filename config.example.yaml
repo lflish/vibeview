@@ -28,6 +28,11 @@ storage:
   site_max_files: 500
   site_max_unpacked_mb: 50
 
+# 资源版本：dview upload --id / .dview.json 会更新同一个链接，每次更新保存一个版本
+versions:
+  # 单个资源最多保留的版本数（≥2）；超出时删除最早的版本，第 1 版和当前版本总是保留
+  max_per_resource: 50
+
 # 访问码过期只限制访问，不删除文件；与 storage.retention_days 分开。
 access:
   default_required: true

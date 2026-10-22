@@ -440,6 +440,7 @@
       null,
       ['settings', '访问设置…', () => openAccess(it)],
       ['tag', '编辑分类…', () => openLabels(it)],
+      ['clock', '版本历史…', () => openVersions(it)],
       null,
       ['trash', '删除…', () => openDelete(it), 'danger'],
     ];
@@ -581,6 +582,16 @@
     a.textContent = it.filename || '(无文件名)';
     a.title = (it.filename || '') + '\nID ' + it.id + '\n在新标签页打开预览';
     title.appendChild(a);
+    if (it.versionCount > 1 || it.version > 1) {
+      const ver = document.createElement('button');
+      ver.type = 'button';
+      ver.className = 'version-badge';
+      ver.textContent = 'v' + it.version;
+      ver.title = '共 ' + it.versionCount + ' 个版本，最近更新 ' + fmtTime(it.updatedAt) + '，点击查看版本历史';
+      ver.setAttribute('aria-label', '第 ' + it.version + ' 版，查看版本历史');
+      ver.onclick = () => openVersions(it);
+      title.appendChild(ver);
+    }
     const description = document.createElement('span');
     description.className = 'description' + (it.description ? '' : ' empty');
     description.textContent = it.description || '暂无简介';
@@ -884,6 +895,117 @@
   $('labels-modal').addEventListener('click', (event) => { if (event.target === $('labels-modal')) closeLabels(); });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !$('labels-modal').classList.contains('hidden')) closeLabels();
+  });
+
+  // ---- 版本历史：查看、打开、删除历史版本 ----
+  let versionsItem = null;
+  let versionsOpener = null;
+  let versionsChanged = false;
+  function openVersions(it) {
+    versionsItem = it;
+    versionsOpener = document.activeElement;
+    versionsChanged = false;
+    $('versions-name').textContent = it.filename || it.id;
+    $('versions-error').textContent = '';
+    const loading = document.createElement('li');
+    loading.className = 'loading';
+    loading.textContent = '正在加载…';
+    $('versions-list').replaceChildren(loading);
+    $('versions-modal').classList.remove('hidden');
+    $('versions-close').focus();
+    loadVersions(it);
+  }
+  async function loadVersions(it) {
+    try {
+      const r = await fetch('/admin/api/item/' + encodeURIComponent(it.id) + '/versions', { cache: 'no-store' });
+      if (r.status === 401) { location.href = '/admin/login'; return; }
+      const data = await r.json();
+      if (versionsItem !== it) return;
+      if (!r.ok) throw new Error(data.error || '加载失败');
+      renderVersions(it, data);
+    } catch (error) {
+      if (versionsItem === it) $('versions-error').textContent = '无法加载版本：' + error.message;
+    }
+  }
+  function renderVersions(it, data) {
+    const rows = [...data.versions].reverse().map((v) => {
+      const li = document.createElement('li');
+      const ver = document.createElement('span');
+      ver.className = 'ver';
+      ver.textContent = 'v' + v.n;
+      const info = document.createElement('div');
+      info.className = 'info';
+      const msg = document.createElement('div');
+      msg.className = 'msg' + (v.message ? '' : ' empty');
+      msg.textContent = v.message || '（无更新说明）';
+      msg.title = v.message || '';
+      if (v.current) {
+        const tag = document.createElement('span');
+        tag.className = 'current-tag';
+        tag.textContent = '当前';
+        ver.appendChild(tag);
+      }
+      const sub = document.createElement('div');
+      sub.className = 'sub';
+      const commit = v.git ? 'commit ' + v.git.commit + (v.git.dirty ? '（含未提交改动）' : '') : '';
+      sub.textContent = [fmtTime(v.createdAt), fmtSize(v.size), commit].filter(Boolean).join(' · ');
+      info.append(msg, sub);
+      const ops = document.createElement('div');
+      ops.className = 'ops';
+      const open = document.createElement('a');
+      open.className = 'btn btn-sm';
+      open.href = v.url;
+      open.target = '_blank';
+      open.rel = 'noopener';
+      open.textContent = '打开';
+      ops.appendChild(open);
+      if (!v.current && v.n !== 1) {
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn btn-sm';
+        del.textContent = '删除';
+        del.setAttribute('aria-label', '删除第 ' + v.n + ' 版');
+        // 第一次点击变成确认，避免误删
+        del.onclick = () => {
+          if (!del.classList.contains('btn-confirm')) {
+            del.classList.add('btn-confirm');
+            del.textContent = '确认删除';
+            return;
+          }
+          deleteVersion(it, v.n, del);
+        };
+        ops.appendChild(del);
+      }
+      li.append(ver, info, ops);
+      return li;
+    });
+    $('versions-list').replaceChildren(...rows);
+  }
+  async function deleteVersion(it, n, button) {
+    button.disabled = true;
+    $('versions-error').textContent = '';
+    try {
+      const r = await fetch('/admin/api/item/' + encodeURIComponent(it.id) + '/versions/' + n, { method: 'DELETE' });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || '删除失败');
+      versionsChanged = true;
+      toast('已删除第 ' + n + ' 版', 'ok');
+      if (versionsItem === it) renderVersions(it, data);
+    } catch (error) {
+      button.disabled = false;
+      $('versions-error').textContent = error.message;
+    }
+  }
+  function closeVersions() {
+    $('versions-modal').classList.add('hidden');
+    versionsItem = null;
+    if (versionsChanged) load();
+    else if (versionsOpener && versionsOpener.isConnected) versionsOpener.focus();
+  }
+  $('versions-close').addEventListener('click', closeVersions);
+  $('versions-modal').addEventListener('click', (event) => { if (event.target === $('versions-modal')) closeVersions(); });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !$('versions-modal').classList.contains('hidden')) closeVersions();
   });
 
   let bulkOpener = null;

@@ -2,7 +2,8 @@
 # vibeview CLI — upload / list / delete own previews
 #
 # Usage:
-#   dview upload <file|dir|site.zip> [--category C] [--tag T] [--url URL] [--token TOKEN]
+#   dview upload <file|dir|site.zip> [-m MSG] [--id ID|--new] [--category C] [--tag T] [--url URL] [--token TOKEN]
+#   dview versions <id>
 #   dview list [--category C] [--project P] [--tag T] [--url URL] [--token TOKEN]
 #   dview edit <id> [--category C] [--tag T] [--project P] [--agent A] [--model M] [--description D]
 #   dview delete <id> [--url URL] [--token TOKEN]
@@ -20,6 +21,9 @@ vibeview CLI — 上传并管理本账户预览资源（dview 与 vibeview 两�
                          默认生成访问码（stderr 显示），有效期 7 天
   dview upload <dir>      上传多页面站点：目录根部需有 index.html，自动打包成 zip
                          （跳过 . 开头的文件、node_modules 和符号链接）；也可直接上传 .zip
+                         在 git 仓库里上传时，.dview.json 记录"文件 → 资源"，
+                         再次上传同一文件会更新原链接（生成新版本），而不是新建
+  dview versions <id>     查看资源的版本列表
   dview list              列出本账户资源（可用分类选项筛选）
   dview edit <id>         修改本账户资源的分类、标签、项目、agent 或描述
   dview delete <id>       删除本账户下的一条资源
@@ -32,6 +36,12 @@ vibeview CLI — 上传并管理本账户预览资源（dview 与 vibeview 两�
   --json                  上传结果按 JSON 输出（包含新访问码）
   --public                上传为免验证码的公开资源
   --access-days DAYS      新访问码有效天数（默认服务端配置）
+
+版本选项（upload）:
+  -m, --message TEXT      这次更新的说明，如 "补充错误提示"
+  --id ID                 更新指定资源（生成新版本，链接和访问码不变）
+  --new                   忽略 .dview.json，强制新建资源
+  --no-map                不读写 .dview.json
   -h, --help              显示帮助
 
 分类选项（upload / edit 写入，list 用于筛选）:
@@ -54,6 +64,8 @@ vibeview CLI — 上传并管理本账户预览资源（dview 与 vibeview 两�
   export DVIEW_URL=https://view.example.com DVIEW_TOKEN=xxx
   dview upload ./chart.html
   dview upload ./snake.html --category game --tag h5,demo
+  dview upload docs/prd/login.html -m "补充错误提示"   # 上传过则更新原链接
+  dview versions Ab3xK9mP2qR7sT1v
   dview list --category report
   dview edit Ab3xK9mP2qR7sT1v --category doc --tag onboarding
   dview delete Ab3xK9mP2qR7sT1v
@@ -132,6 +144,10 @@ ACCESS_DAYS=""
 DETECT=1
 TAGS=""
 TAGS_SET=0
+MESSAGE=""
+TARGET_ID=""
+FORCE_NEW=0
+USE_MAP=1
 # 分类字段：L_<name> 为值，S_<name>=1 表示命令行显式给出（bash 3.2 无关联数组）
 L_category="" L_agent="" L_model="" L_project="" L_description=""
 S_category=0 S_agent=0 S_model=0 S_project=0 S_description=0
@@ -181,7 +197,25 @@ while [ "$#" -gt 0 ]; do
       DETECT=0
       shift
       ;;
-    upload|list|edit|delete|me|whoami)
+    -m|--message)
+      [ "$#" -ge 2 ] || { err "$1 需要参数"; exit 1; }
+      MESSAGE="$2"
+      shift 2
+      ;;
+    --id)
+      [ "$#" -ge 2 ] || { err "--id 需要参数"; exit 1; }
+      TARGET_ID="$2"
+      shift 2
+      ;;
+    --new)
+      FORCE_NEW=1
+      shift
+      ;;
+    --no-map)
+      USE_MAP=0
+      shift
+      ;;
+    upload|list|edit|delete|versions|me|whoami)
       if [ -n "$CMD" ]; then
         ARGS+=("$1")
         shift
@@ -291,6 +325,62 @@ PY
   fi
 }
 
+# ---- .dview.json：仓库里"文件 → 资源 id"的映射，提交进 git，换机器、换 agent 也能更新同一个链接 ----
+# map_tool get <map> <key> | set <map> <key> <id>
+map_tool() {
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c '
+import json, os, sys
+op, path, key = sys.argv[1], sys.argv[2], sys.argv[3]
+data = {}
+if os.path.exists(path):
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+items = data.get("items") if isinstance(data.get("items"), dict) else {}
+if op == "get":
+    print(items.get(key, ""))
+else:
+    items[key] = sys.argv[4]
+    data["items"] = dict(sorted(items.items()))
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
+' "$@"
+    return
+  fi
+  command -v node >/dev/null 2>&1 || return 1
+  node -e '
+const fs = require("fs");
+const [op, file, key, id] = process.argv.slice(1);
+const data = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+const items = data.items && typeof data.items === "object" ? data.items : {};
+if (op === "get") { console.log(items[key] || ""); process.exit(0); }
+items[key] = id;
+data.items = Object.fromEntries(Object.entries(items).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+fs.writeFileSync(file + ".tmp", JSON.stringify(data, null, 2) + "\n");
+fs.renameSync(file + ".tmp", file);
+' "$@"
+}
+
+# 设置 REPO_ROOT / MAP_KEY：文件在 git 仓库里且没被 .gitignore 忽略时才使用映射。
+resolve_map_key() {
+  local file="$1" abs dir root_real
+  REPO_ROOT="" MAP_KEY=""
+  command -v git >/dev/null 2>&1 || return 0
+  if [ -d "$file" ]; then dir="$file"; else dir="$(dirname "$file")"; fi
+  REPO_ROOT="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$REPO_ROOT" ] || return 0
+  if [ -d "$file" ]; then abs="$(cd "$file" && pwd -P)/"; else abs="$(cd "$dir" && pwd -P)/$(basename "$file")"; fi
+  root_real="$(cd "$REPO_ROOT" && pwd -P)"
+  case "$abs" in
+    "$root_real"/*) MAP_KEY="${abs#"$root_real"/}" ;;
+    *) REPO_ROOT=""; return 0 ;;
+  esac
+  if git -C "$REPO_ROOT" check-ignore -q -- "${MAP_KEY%/}" 2>/dev/null; then MAP_KEY=""; fi
+}
+
 cmd_upload() {
   require_auth
   if [ "${#ARGS[@]}" -ne 1 ]; then
@@ -334,9 +424,34 @@ cmd_upload() {
     if [ -n "$value" ]; then fields+=(--form-string "$key=$value"); fi
   done
   if [ -n "$TAGS" ]; then fields+=(--form-string "tags=$TAGS"); fi
+
+  # 更新还是新建：--id > .dview.json 映射（--new 时跳过）> 新建
+  local target="$TARGET_ID" from_map=0 commit
+  REPO_ROOT="" MAP_KEY=""
+  if [ "$USE_MAP" = "1" ]; then resolve_map_key "$file"; fi
+  if [ -z "$target" ] && [ "$FORCE_NEW" = "0" ] && [ -n "$MAP_KEY" ] && [ -f "$REPO_ROOT/.dview.json" ]; then
+    target="$(map_tool get "$REPO_ROOT/.dview.json" "$MAP_KEY" 2>/dev/null || true)"
+    if [ -n "$target" ]; then from_map=1; fi
+  fi
+  if [ -n "$target" ]; then fields+=(--form-string "id=$target"); fi
+  if [ -n "$MESSAGE" ]; then fields+=(--form-string "message=$MESSAGE"); fi
+  # 记录这一版对应的 commit；被上传的文件有未提交改动时标记 dirty
+  if [ -n "$REPO_ROOT" ]; then
+    commit="$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD 2>/dev/null || true)"
+    if [ -n "$commit" ]; then
+      fields+=(--form-string "git_commit=$commit")
+      if [ -n "$(git -C "$REPO_ROOT" status --porcelain -- "${MAP_KEY:-.}" 2>/dev/null)" ]; then
+        fields+=(--form-string 'git_dirty=1')
+      fi
+    fi
+  fi
+
   http POST "${BASE}/upload" "${fields[@]}"
   if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
     err "上传失败 (HTTP ${HTTP_CODE}): ${BODY}"
+    if [ "$from_map" = "1" ] && { [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "403" ]; }; then
+      err ".dview.json 里 ${MAP_KEY} 对应的资源 ${target} 已不存在或不属于当前账户。用 --new 新建（会更新映射），或用 --id 指定要更新的资源"
+    fi
     exit 1
   fi
   local preview
@@ -345,14 +460,55 @@ cmd_upload() {
     err "上传失败，服务返回: ${BODY}"
     exit 1
   fi
+  local new_id
+  new_id="$(json_field id "$BODY" || true)"
+  if [ -n "$MAP_KEY" ] && [ -n "$new_id" ] && [ "$from_map" = "0" ]; then
+    if map_tool set "$REPO_ROOT/.dview.json" "$MAP_KEY" "$new_id" 2>/dev/null; then
+      printf '已记录到 .dview.json: %s → %s（请提交进 git）\n' "$MAP_KEY" "$new_id" >&2
+    else
+      err "无法写入 $REPO_ROOT/.dview.json"
+    fi
+  fi
   if [ "$UPLOAD_JSON" = "1" ]; then
     printf '%s\n' "$BODY"
   else
     printf '%s\n' "$preview"
-    local access_code
+    local access_code updated
     access_code="$(json_field accessCode "$BODY" || true)"
+    updated="$(json_field updated "$BODY" || true)"
+    if [ "$updated" = "True" ] || [ "$updated" = "true" ]; then
+      printf '已更新为第 %s 版，链接和访问码不变\n' "$(json_field version "$BODY" || true)" >&2
+    fi
     if [ -n "$access_code" ]; then printf '访问码（请单独分享并保存）: %s\n' "$access_code" >&2; fi
   fi
+}
+
+cmd_versions() {
+  require_auth
+  if [ "${#ARGS[@]}" -ne 1 ]; then
+    err "用法: dview versions <id>"
+    exit 1
+  fi
+  http GET "${BASE}/api/me/items/${ARGS[0]}/versions"
+  if [ "$HTTP_CODE" != "200" ]; then
+    err "查询失败 (HTTP ${HTTP_CODE}): ${BODY}"
+    exit 1
+  fi
+  if [ "$UPLOAD_JSON" = "1" ] || ! command -v python3 >/dev/null 2>&1; then
+    json_pretty "$BODY"
+    return
+  fi
+  DVIEW_VERSIONS_JSON="$BODY" python3 -c '
+import json, os
+data = json.loads(os.environ["DVIEW_VERSIONS_JSON"])
+print("%-6s %-19s %10s  %-14s %s" % ("VER", "CREATED", "SIZE", "COMMIT", "MESSAGE"))
+for v in reversed(data.get("versions") or []):
+    git = v.get("git") or {}
+    commit = (git.get("commit") or "-") + ("*" if git.get("dirty") else "")
+    label = "v%d%s" % (v["n"], " *" if v.get("current") else "")
+    print("%-6s %-19s %10s  %-14s %s" % (label, str(v.get("createdAt") or "")[:19], "{:,}".format(int(v.get("size") or 0)), commit, v.get("message") or ""))
+    print("       " + str(v.get("url") or ""))
+'
 }
 
 cmd_list() {
@@ -454,6 +610,7 @@ case "$CMD" in
   list) cmd_list ;;
   edit) cmd_edit ;;
   delete) cmd_delete ;;
+  versions) cmd_versions ;;
   me|whoami) cmd_me ;;
   *)
     err "未知命令: $CMD"

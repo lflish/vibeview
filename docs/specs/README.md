@@ -31,7 +31,7 @@
 | Spec | 状态 | 说明 |
 | --- | --- | --- |
 | [admin-statistics.md](./admin-statistics.md) | 已实现 | 管理端统计 |
-| [resource-versions.md](./resource-versions.md) | 草案 | 固定链接、更新内容、版本历史（模板和评审的基础） |
+| [resource-versions.md](./resource-versions.md) | 已实现（未发布） | 固定链接、更新内容、版本历史（模板和评审的基础） |
 | [page-templates.md](./page-templates.md) | 草案 | 页面模板：关键词匹配、数据渲染、按模板开启功能 |
 | [review-comments.md](./review-comments.md) | 草案 | 需求评审：页面批注、多角色评论、确认签字 |
 

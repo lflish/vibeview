@@ -120,6 +120,32 @@ curl -fsS -X POST "${DVIEW_URL%/}/upload" \
 
 **访问保护**：访客在任意页面输入一次访问码即可浏览整个站点，验证后回到原来打开的页面。站点页面在浏览器沙箱里运行，样式、模块脚本和 `fetch` 等子请求不会携带 cookie，所以验证通过后，服务会把访客重定向到带短期凭证的地址 `/v/<id>/~<凭证>/...`，站内相对链接自动带上它。凭证绑定该站点和当前访问码版本，与预览授权同时到期（默认 30 分钟）；重置访问码、改变有效期或重启主服务都会让它失效，之后访客需要重新验证。凭证在地址栏里可见，分享时请分享上传返回的地址，而不是浏览器地址栏里的地址。
 
+### 更新与版本
+
+需求页、原型这类会反复修改的页面，可以一直使用同一个链接：每次更新生成一个新版本，链接和访问码不变，发出去的链接打开就是最新内容。
+
+```bash
+dview upload docs/prd/login.html                        # 第一次：新建，并写入 .dview.json
+dview upload docs/prd/login.html -m "补充错误提示"        # 再次上传同一路径：更新原链接，生成第 2 版
+dview upload ./dist --id Ab3xK9mP2qR7sT1v -m "修复样式"  # 指定要更新的资源
+dview versions Ab3xK9mP2qR7sT1v                         # 版本列表
+```
+
+- **`.dview.json`**：在 git 仓库里上传时，CLI 把"文件路径（相对仓库根目录）→ 资源 id"记在仓库根目录的 `.dview.json`，之后上传同一路径就更新这个资源。把它提交进 git，换机器、换 agent 也能更新同一个链接。仓库外的文件和被 `.gitignore` 忽略的文件不记录；`--new` 强制新建并改写映射，`--no-map` 不读写映射。映射的资源已删除或不属于当前账户时，CLI 报错，不会自动新建。
+- **版本说明与 commit**：`-m` 写这次改了什么；在 git 仓库里上传时自动记录当前 commit，被上传的文件有未提交改动时标记出来。
+- **历史版本**：`/v/<id>/@<n>` 是第 n 版（站点为 `/v/<id>/@<n>/`），用同一个访问码打开。站点的顶层目录不能命名为 `@<数字>`。
+- **保留与配额**：单个资源最多保留 `versions.max_per_resource`（默认 50）个版本，超出时删除最早的版本，第 1 版和当前版本总是保留。资源大小和账户存储配额按所有保留版本的总和计算；更新不占文件数。设置了 `storage.retention_days` 时，从最后一次更新算起。
+- **保持不变的内容**：访问码、分类、项目和标签沿用原来的，请求里给出的字段才会覆盖。简介原本取自页面标题时跟随新版本更新，手动设置的简介保持不变。
+- **类型不能变**：HTML 只能更新为 HTML，站点只能更新为站点；只能更新本账户的资源。
+- 管理端的资源名旁边显示版本号（如 `v3`），在「⋯ → 版本历史」中可以打开或删除历史版本。
+
+curl 更新时多传一个 `id` 字段，可选 `message`：
+
+```bash
+curl -fsS -X POST "${DVIEW_URL%/}/upload" -H "Authorization: Bearer $DVIEW_TOKEN" \
+  -F "id=Ab3xK9mP2qR7sT1v" -F "message=补充错误提示" -F "file=@./login.html"
+```
+
 ### 分类、项目与标签
 
 每个资源可以记录「这是什么页面、属于哪个项目、由哪个 agent 生成」，便于在资源很多时筛选和整理：
@@ -320,9 +346,12 @@ npm start
 | `DELETE /api/me/items/:id` | Bearer 上传 token | 删除本账户资源 |
 | `PATCH /api/me/items/:id/access` | Bearer 上传 token | 修改本账户资源的访问保护 |
 | `PATCH /api/me/items/:id/meta` | Bearer 上传 token | 修改本账户资源的分类、项目、agent、模型、标签或简介 |
+| `GET /api/me/items/:id/versions` | Bearer 上传 token | 本账户资源的版本列表 |
+| `DELETE /api/me/items/:id/versions/:n` | Bearer 上传 token | 删除一个历史版本（第 1 版和当前版本不能删） |
 | `GET /v/:id` | 公开，或已验证的预览 cookie | 预览页面；未授权时显示访问码表单 |
 | `POST /v/:id/unlock` | 表单中的 `code` | 验证访问码并设置预览 cookie |
 | `GET /v/:id/raw` | 与预览页相同 | 获取原文件，支持 Range 请求 |
+| `GET /v/:id/@:n`、`/v/:id/@:n/raw`、`/v/:id/@:n/<路径>` | 与预览页相同 | 第 n 个版本的页面、原文件或站点内容 |
 | `GET /v/:id/<路径>` | 公开站点直接访问；受保护站点用 `/v/:id/~<凭证>/<路径>` | 多页面站点的页面和资源；未授权的页面显示访问码表单 |
 | `GET /admin/api/statistics` | 管理员 session | 概览、趋势、月历、分布与活动 |
 | `GET /admin/api/statistics/day` | 管理员 session | 当日上传事件与分页明细 |
@@ -332,7 +361,9 @@ npm start
 | `GET /admin/api/item/:id/access-code` | 管理员 session | 读取当前访问码；公开或无法读取时返回 `409` |
 | `PATCH /admin/api/item/:id/meta` | 管理员 session | 修改分类、项目、agent、模型、标签或简介 |
 | `PATCH /admin/api/items/meta` | 管理员 session | 批量整理，JSON 为 `{"ids":[...],"category":"report","project":"x","addTags":"q3"}`，最多 100 条；未给出的字段保持不变，标签为追加 |
-| `DELETE /admin/api/item/:id` | 管理员 session | 删除单条资源 |
+| `GET /admin/api/item/:id/versions` | 管理员 session | 版本列表 |
+| `DELETE /admin/api/item/:id/versions/:n` | 管理员 session | 删除一个历史版本 |
+| `DELETE /admin/api/item/:id` | 管理员 session | 删除单条资源及其所有版本 |
 | `DELETE /admin/api/items` | 管理员 session | 批量删除，JSON 为 `{"ids":["id1","id2"]}`，最多 100 条 |
 | `GET /admin/api/accounts` | 管理员 session | 账户列表与用量 |
 | `POST /admin/api/accounts/:name/disable` 或 `/enable` | 管理员 session | 停用或启用账户 |

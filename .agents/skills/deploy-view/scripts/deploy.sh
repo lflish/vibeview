@@ -90,7 +90,7 @@ for f in "${!old[@]}"; do [[ -n "${new[$f]:-}" ]] || removed+=("$f"); done
 need_npm=0; need_render=0
 for f in "${changed[@]}" "${removed[@]}"; do
   case "$f" in package.json|package-lock.json) need_npm=1; need_render=1 ;; esac
-  case "$f" in Dockerfile.render|docker-compose.yml|render-server.js|lib/viewer.js|lib/preview-store.js|lib/preview-routes.js) need_render=1 ;; esac
+  case "$f" in Dockerfile.render|docker-compose.yml|render-server.js|lib/viewer.js|lib/preview-store.js|lib/preview-routes.js|lib/versions.js) need_render=1 ;; esac
 done
 
 say "目标:   ${VIEW_DEPLOY_HOST:-本机} $VIEW_DEPLOY_DIR（$VIEW_SERVICE_MANAGER $VIEW_SERVICE_NAME）"

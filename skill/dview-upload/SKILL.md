@@ -111,6 +111,18 @@ https://view.example.com/v/Ab3xK9mP2qR7sT1v
 
 受保护预览需要先在验证表单输入访问码，自动验证应使用 `POST /v/<id>/unlock` 并保留服务端 cookie；原文件也需要授权。遇到 429 遵守 `Retry-After` 并停止猜码，不要换 IP 或循环重试。受保护 HTML 使用浏览器 sandbox，脚本访问 localStorage 时应捕获异常并回退到内存中的主题状态。
 
+## 修改已上传的页面（同一个链接）
+
+需求页、原型这类会反复修改的页面，**更新原链接，不要每次新建**：
+
+- 在 git 仓库里用 `dview upload` 上传时，CLI 把"文件路径 → 资源 id"记在仓库根目录的 `.dview.json`。再次上传同一路径会自动生成新版本，链接和访问码不变。新建资源后提醒用户把 `.dview.json` 提交进 git。
+- 每次更新用 `-m` 写一句改了什么：`dview upload docs/prd/login.html --json -m "补充错误提示"`。
+- 生成的页面放在仓库里会反复修改时，存到仓库内的固定路径（如 `docs/prd/`、`docs/prototype/`），不要放临时目录，否则映射不起作用。临时目录和被 `.gitignore` 忽略的文件不会写映射。
+- 没有映射时用 `--id <id>` 指定要更新的资源；`--new` 强制新建。映射的资源已删除时 CLI 会报错，不会自动新建。
+- 更新的响应里 `updated: true`，`version` 是新版本号，`versionUrl` 是这一版的永久地址，不返回新访问码（沿用原来的）。
+- 历史版本地址是 `/v/<id>/@<n>`（站点为 `/v/<id>/@<n>/`），用同一个访问码打开；`dview versions <id>` 列出所有版本。
+- Skill 自带的 `upload.sh` 不读 `.dview.json`，只支持 `--id` 和 `-m`。
+
 ## 上传时标注分类（每次都要做）
 
 资源多了以后，管理员靠分类、项目和标签筛选与清理。上传时按页面实际用途选择**一个** `--category`：
@@ -138,7 +150,7 @@ dview upload /tmp/q3-report.html --json --category report --tag q3,ops --model c
 
 ## 上传与管理统计
 
-成功上传会产生一条上传事件；重复上传同一文件得到新 ID，也会增加一次上传。删除文件会减少当前存量，但不会扣减历史上传量；访问码重置或过期不算上传/删除。
+成功新建资源会产生一条上传事件；用 `--new` 或在仓库外重复上传同一文件得到新 ID，也会增加一次上传。更新已有资源（生成新版本）不计为新的上传。删除文件会减少当前存量，但不会扣减历史上传量；访问码重置或过期不算上传/删除。
 
 真实统计在管理员 `/admin/statistics` 页面，API 为 `/admin/api/statistics` 和 `/admin/api/statistics/day`，要求管理员 session。上传 token 不授予管理统计权限，不要使用 Bearer token 冒充管理会话。此 Skill 不替用户申请或绕过管理员权限。
 

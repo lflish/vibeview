@@ -276,6 +276,19 @@
       </div>
     </form>
   </div>
+
+  <div class="modal-backdrop hidden" id="versions-modal" role="dialog" aria-modal="true" aria-labelledby="versions-title">
+    <div class="modal modal-wide">
+      <h2 id="versions-title">版本历史</h2>
+      <p id="versions-name"></p>
+      <ol class="version-list" id="versions-list" aria-live="polite"></ol>
+      <p class="field-hint">固定链接始终显示最新版本；历史版本使用同一个访问码。第 1 版和当前版本不能删除。</p>
+      <p class="form-error" id="versions-error" role="alert"></p>
+      <div class="actions">
+        <button type="button" class="btn" id="versions-close">关闭</button>
+      </div>
+    </div>
+  </div>
 <script src="/admin/admin.js"></script>
 </body>
 </html>
