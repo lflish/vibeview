@@ -47,7 +47,11 @@ fi
 pass "代码和发布说明的敏感信息扫描"
 
 # 先在本地打 tag，再按 tag 打包（包名和包内顶层目录都用 tag 命名）；推送失败会删掉本地 tag。
-git tag -a "$tag" -m "vibeview $tag" "$head"
+# tag 说明：摘要 + 需求说明清单 + Release 链接（完整说明在 Release 里）
+tag_message="$(mktemp)"
+trap 'rm -f "$tag_message"' EXIT
+bash .agents/skills/release/scripts/tag-message.sh "$version" "$notes" "$head" >"$tag_message"
+git tag -a "$tag" -F "$tag_message" "$head"
 out="dist/$tag"
 rm -rf "$out"
 archive="$(bash scripts/package-release.sh "$tag" "$out")" || { git tag -d "$tag" >/dev/null; fail "打包失败，已删除本地 tag"; }
