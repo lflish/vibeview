@@ -19,6 +19,7 @@ const { createPreviewProxy } = require('./lib/preview-proxy');
 const { createPreviewAccess, constantEqual } = require('./lib/preview-access');
 const { createAdminLoginProtection } = require('./lib/admin-login');
 const { extractSite, SiteArchiveError } = require('./lib/site-archive');
+const versions = require('./lib/versions');
 // 预览访问计数：爬虫与带管理员会话 cookie 的打开单独计数，不算作访客。
 // 预览路由挂在 session 中间件之前，这里只看 cookie 是否存在（只有登录成功才会下发）。
 function hasAdminCookie(req) {
@@ -126,22 +127,75 @@ const upload = multer({
 }).single('file');
 
 function mapItem(m) {
-  // 索引行不含站点的 zip 名和文件数，从元数据补齐
-  const full = m.type === 'site' && m.fileCount === undefined ? store.readMeta(m.id) || m : m;
-  const description = m.description || metadata.descriptionFromFile(store.filePath(m.type === 'site' ? { ...m, filename: 'index.html' } : m), m.type);
+  // 索引行不含站点的 zip 名、文件数和版本信息，从元数据补齐
+  const full = store.readMeta(m.id) || m;
+  const description = m.description || metadata.descriptionFromFile(store.filePath(full.type === 'site' ? { ...full, filename: 'index.html' } : full), m.type);
   return {
     id: m.id,
     type: m.type,
     // 站点显示上传的 zip 名；入口固定是 index.html
-    filename: m.type === 'site' ? full.archiveName || 'site.zip' : m.filename,
+    filename: m.type === 'site' ? full.archiveName || 'site.zip' : full.filename,
     ...(m.type === 'site' ? { fileCount: full.fileCount } : {}),
     size: m.size,
     source: m.source,
     description,
     ...classification.normalize(m),
     createdAt: m.createdAt,
-    access: previewAccess.info(store.readMeta(m.id) || m),
+    ...versions.summary(full),
+    access: previewAccess.info(full),
     url: `${config.baseUrl}/v/${m.id}`,
+  };
+}
+
+// ---- 资源版本 ----
+// 同一资源的更新、删版本串行执行，避免两次更新拿到同一个版本号。
+const versionLocks = new Map();
+function withVersionLock(id, task) {
+  const run = (versionLocks.get(id) || Promise.resolve()).then(task);
+  const tail = run.catch(() => {});
+  versionLocks.set(id, tail);
+  tail.then(() => { if (versionLocks.get(id) === tail) versionLocks.delete(id); });
+  return run;
+}
+
+function httpError(status, message) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+// 本次上传的版本说明与 git 信息（CLI 在 git 仓库里自动带上）
+function versionNote(body = {}) {
+  const message = typeof body.message === 'string' ? body.message.trim().slice(0, 500) : '';
+  const commit = typeof body.git_commit === 'string' ? body.git_commit.trim().toLowerCase() : '';
+  const git = /^[0-9a-f]{7,40}$/.test(commit) ? { commit, dirty: ['1', 'true'].includes(String(body.git_dirty)) } : null;
+  return { ...(message ? { message } : {}), ...(git ? { git } : {}) };
+}
+
+function previewUrl(meta, n) {
+  const site = meta.type === 'site' ? '/' : '';
+  return n === undefined || n === versions.current(meta)
+    ? `${config.baseUrl}/v/${meta.id}${site}`
+    : `${config.baseUrl}/v/${meta.id}/@${n}${site}`;
+}
+
+function versionList(meta) {
+  const current = versions.current(meta);
+  return {
+    id: meta.id,
+    type: meta.type,
+    current,
+    versions: versions.list(meta).map((entry) => ({
+      n: entry.n,
+      filename: meta.type === 'site' ? entry.archiveName || 'site.zip' : entry.filename,
+      size: Number(entry.size) || 0,
+      ...(meta.type === 'site' ? { fileCount: entry.fileCount } : {}),
+      createdAt: entry.createdAt,
+      message: entry.message || '',
+      git: entry.git || null,
+      current: entry.n === current,
+      url: previewUrl(meta, entry.n),
+    })),
   };
 }
 
@@ -224,14 +278,7 @@ function cleanupFailedUpload(req) {
 
 // ---- A. 上传接口 ----
 app.post('/upload', requireToken, (req, res) => {
-  // 文件数配额可在落盘前预检；存储配额需等 multer 给出 size
-  const usage = accounts.usageFor(req.account.name);
-  if (req.account.maxFiles != null && usage.count >= req.account.maxFiles) {
-    return res.status(429).json({
-      error: `quota exceeded: max_files=${req.account.maxFiles} (current ${usage.count})`,
-    });
-  }
-
+  // 配额在文件落盘后检查：表单里的 id（更新已有资源）要等 multer 解析完才知道，更新不占文件数。
   upload(req, res, async (err) => {
     if (err) {
       cleanupFailedUpload(req);
@@ -239,6 +286,21 @@ app.post('/upload', requireToken, (req, res) => {
       return res.status(400).json({ error: msg });
     }
     if (!req.file) return res.status(400).json({ error: 'no file (field name must be "file")' });
+
+    // 带 id 表示更新这个资源：只能更新自己的，类型不能变
+    const targetId = typeof req.body.id === 'string' ? req.body.id.trim() : '';
+    if (targetId) {
+      const target = store.readMeta(targetId);
+      const problem = !store.isValidId(targetId) ? [400, 'bad id']
+        : !target ? [404, 'not found']
+          : target.source !== req.account.name ? [403, 'forbidden: not your resource']
+            : target.type !== req.uploadType ? [400, `type mismatch: resource is ${target.type}, upload is ${req.uploadType}`]
+              : null;
+      if (problem) {
+        cleanupFailedUpload(req);
+        return res.status(problem[0]).json({ error: problem[1] });
+      }
+    }
 
     // 站点：解压后按解压总大小计配额
     let site = null;
@@ -261,14 +323,24 @@ app.post('/upload', requireToken, (req, res) => {
     }
     const uploadedSize = site ? site.size : req.file.size;
 
-    const q = accounts.checkQuota(req.account, uploadedSize);
+    const q = accounts.checkQuota(req.account, uploadedSize, { newResource: !targetId });
     if (!q.ok) {
       cleanupFailedUpload(req);
       return res.status(q.status || 429).json({ error: q.error });
     }
 
-    const id = req.uploadId;
     const filename = site ? 'index.html' : safeFilename(req.file.originalname);
+    const entry = {
+      filename,
+      mime: site ? 'text/html' : req.file.mimetype,
+      size: uploadedSize,
+      ...(site ? { archiveName: safeFilename(req.file.originalname), fileCount: site.fileCount } : {}),
+      createdAt: new Date().toISOString(),
+      ...versionNote(req.body),
+    };
+    if (targetId) return updateResource(req, res, targetId, entry);
+
+    const id = req.uploadId;
     let createdAccess;
     try {
       const mode = req.body.access_mode;
@@ -288,13 +360,15 @@ app.post('/upload', requireToken, (req, res) => {
       id,
       type: req.uploadType,
       filename,
-      mime: site ? 'text/html' : req.file.mimetype,
+      mime: entry.mime,
       size: uploadedSize,
-      ...(site ? { archiveName: safeFilename(req.file.originalname), fileCount: site.fileCount } : {}),
+      ...(site ? { archiveName: entry.archiveName, fileCount: site.fileCount } : {}),
       source: req.uploadSource,
       description: metadata.descriptionForUpload(storedPath, req.uploadType, req.body && req.body.description),
       ...classification.forUpload(storedPath, req.uploadType, req.body || {}),
-      createdAt: new Date().toISOString(),
+      createdAt: entry.createdAt,
+      current: 1,
+      versions: [{ n: 1, ...entry }],
     };
     try {
       store.writeMeta(id, meta);
@@ -304,10 +378,109 @@ app.post('/upload', requireToken, (req, res) => {
     }
     res.set('Cache-Control', 'no-store');
     res.json({ url: `${config.baseUrl}/v/${id}${site ? '/' : ''}`, id, type: meta.type, ...(site ? { fileCount: site.fileCount, size: site.size } : {}),
-      source: meta.source, description: meta.description,
+      source: meta.source, description: meta.description, version: 1, updated: false,
       ...classification.normalize(meta), access: previewAccess.info(meta), accessCode: createdAccess.code });
   });
 });
+
+// 更新已有资源：把本次上传（已落在临时 id 目录）整体移到 <资源目录>/.versions/<n>/，再写元数据。
+// 访问码、分类保持不变；只覆盖本次请求里出现的分类字段。描述原本取自页面标题时跟随新版本更新。
+async function updateResource(req, res, id, entry) {
+  const staged = store.fileDir(req.uploadType, req.uploadId);
+  let placed = null;
+  try {
+    const updated = await withVersionLock(id, () => {
+      const meta = store.readMeta(id);
+      if (!meta || meta.source !== req.account.name || meta.type !== req.uploadType) throw httpError(409, 'resource changed during upload');
+      const existing = versions.list(meta);
+      const n = Math.max(...existing.map((item) => item.n)) + 1;
+      if (n > versions.MAX_VERSION) throw httpError(409, 'too many versions');
+      const dest = store.versionDir(meta, n);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.renameSync(staged, dest);
+      placed = dest;
+
+      const { kept, removed } = versions.prune([...existing, { n, ...entry }], config.versions.maxPerResource, n);
+      const patch = {};
+      for (const field of classification.FIELDS) {
+        if (Object.prototype.hasOwnProperty.call(req.body, field)) patch[field] = req.body[field];
+      }
+      const newFile = path.join(dest, entry.filename);
+      const oldTitle = metadata.descriptionFromFile(store.filePath(meta), meta.type);
+      let description = meta.description;
+      if (Object.prototype.hasOwnProperty.call(req.body, 'description')) {
+        description = metadata.descriptionForUpload(newFile, meta.type, req.body.description);
+      } else if (!meta.description || meta.description === oldTitle) {
+        description = metadata.descriptionFromFile(newFile, meta.type) || meta.description;
+      }
+      const next = {
+        ...meta,
+        ...classification.applyPatch(meta, patch),
+        filename: entry.filename,
+        mime: entry.mime,
+        ...(meta.type === 'site' ? { archiveName: entry.archiveName, fileCount: entry.fileCount } : {}),
+        size: versions.totalSize(kept),
+        description,
+        current: n,
+        versions: kept,
+        updatedAt: entry.createdAt,
+      };
+      store.writeMeta(id, next);
+      placed = null;
+      for (const old of removed) fs.rmSync(store.versionDir(meta, old.n), { recursive: true, force: true });
+      return next;
+    });
+    res.set('Cache-Control', 'no-store');
+    // 固定链接始终显示最新版；versionUrl 是这一版的永久地址
+    const versionUrl = `${config.baseUrl}/v/${id}/@${updated.current}${updated.type === 'site' ? '/' : ''}`;
+    res.json({ url: previewUrl(updated), versionUrl,
+      id, type: updated.type, version: updated.current, updated: true,
+      ...(updated.type === 'site' ? { fileCount: updated.fileCount, size: entry.size } : {}),
+      source: updated.source, description: updated.description,
+      ...classification.normalize(updated), access: previewAccess.info(updated) });
+  } catch (error) {
+    if (placed) fs.rmSync(placed, { recursive: true, force: true });
+    else cleanupFailedUpload(req);
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    console.error('[upload] update failed:', error.message);
+    res.status(500).json({ error: 'unable to save new version' });
+  }
+}
+
+// 版本列表与删除：账户只能管自己的资源；当前版本和第 1 版不能删。
+function listVersions(req, res) {
+  const meta = store.readMeta(req.params.id);
+  if (!meta) return res.status(404).json({ error: 'not found' });
+  if (req.account && req.account.name !== meta.source) return res.status(403).json({ error: 'forbidden: not your resource' });
+  res.set('Cache-Control', 'no-store');
+  res.json(versionList(meta));
+}
+
+async function deleteVersion(req, res) {
+  const { id } = req.params;
+  const n = /^[1-9]\d{0,5}$/.test(req.params.n) ? Number(req.params.n) : null;
+  if (!store.isValidId(id) || n === null) return res.status(400).json({ error: 'bad id or version' });
+  try {
+    const updated = await withVersionLock(id, () => {
+      const meta = store.readMeta(id);
+      if (!meta) throw httpError(404, 'not found');
+      if (req.account && req.account.name !== meta.source) throw httpError(403, 'forbidden: not your resource');
+      if (!versions.find(meta, n)) throw httpError(404, 'version not found');
+      if (n === versions.current(meta)) throw httpError(400, 'cannot delete the current version');
+      if (n === 1) throw httpError(400, 'the first version is always kept');
+      const kept = versions.list(meta).filter((entry) => entry.n !== n);
+      const next = { ...meta, versions: kept, size: versions.totalSize(kept) };
+      store.writeMeta(id, next);
+      fs.rmSync(store.versionDir(meta, n), { recursive: true, force: true });
+      return next;
+    });
+    res.json({ ok: true, ...versionList(updated) });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    console.error('[versions] delete failed:', error.message);
+    res.status(500).json({ error: 'unable to delete version' });
+  }
+}
 
 // ---- A2. 账户自助（Bearer token，只能管自己的资源） ----
 app.get('/api/me', requireToken, (req, res) => {
@@ -319,6 +492,9 @@ app.get('/api/me/items', requireToken, (req, res) => {
   const items = withVisits(store.listBySource(req.account.name).map(mapItem)).filter((item) => matchesFilters(item, filters));
   res.json({ items, account: accounts.publicAccountInfo(req.account) });
 });
+
+app.get('/api/me/items/:id/versions', requireToken, listVersions);
+app.delete('/api/me/items/:id/versions/:n', requireToken, deleteVersion);
 
 app.delete('/api/me/items/:id', requireToken, (req, res) => {
   const { id } = req.params;
@@ -622,6 +798,9 @@ app.get('/admin/api/list', requireAdmin, (req, res) => {
     visitsSince: visits.startedAt(),
   });
 });
+
+app.get('/admin/api/item/:id/versions', requireAdmin, listVersions);
+app.delete('/admin/api/item/:id/versions/:n', requireAdmin, requireSameOrigin, deleteVersion);
 
 app.delete('/admin/api/item/:id', requireAdmin, (req, res) => {
   const { id } = req.params;

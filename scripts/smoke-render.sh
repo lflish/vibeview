@@ -13,6 +13,7 @@ echo "== syntax: node --check =="
 node --check render-server.js
 node --check lib/preview-store.js
 node --check lib/preview-routes.js
+node --check lib/versions.js
 node --check lib/preview-proxy.js
 node --check server.js
 

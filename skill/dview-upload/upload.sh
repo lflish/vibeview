@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # vibeview 上传脚本（Skill 内置；完整能力见仓库 bin/dview）
 # 用法: ./upload.sh <文件路径|站点目录|站点.zip> [--json] [--category C] [--tag T] [--project P]
-#                   [--agent A] [--model M] [--description D]
+#                   [--agent A] [--model M] [--description D] [--id ID] [-m MSG]
+# --id 更新已有资源（生成新版本，链接和访问码不变）；-m 写这次更新的说明。
+# 按 .dview.json 自动更新同一个链接需要完整的 bin/dview。
 # 依赖环境变量:
 #   DVIEW_URL    服务地址 (如 https://view.example.com)
 #   DVIEW_TOKEN  上传 token (来自服务端 config.yaml 的 tokens 列表)
@@ -12,7 +14,7 @@
 set -euo pipefail
 
 usage() {
-  echo "用法: $0 <文件路径|站点目录> [--json] [--category C] [--tag T] [--project P] [--agent A] [--model M] [--description D]" >&2
+  echo "用法: $0 <文件路径|站点目录> [--json] [--category C] [--tag T] [--project P] [--agent A] [--model M] [--description D] [--id ID] [-m MSG]" >&2
   exit 1
 }
 
@@ -32,6 +34,8 @@ while [ "$#" -gt 0 ]; do
     --model) [ "$#" -ge 2 ] || usage; MODEL="$2"; shift 2 ;;
     --category|--description) [ "$#" -ge 2 ] || usage; FIELDS+=(--form-string "${1#--}=$2"); shift 2 ;;
     --tag|--tags) [ "$#" -ge 2 ] || usage; FIELDS+=(--form-string "tags=$2"); shift 2 ;;
+    --id) [ "$#" -ge 2 ] || usage; FIELDS+=(--form-string "id=$2"); shift 2 ;;
+    -m|--message) [ "$#" -ge 2 ] || usage; FIELDS+=(--form-string "message=$2"); shift 2 ;;
     *) usage ;;
   esac
 done

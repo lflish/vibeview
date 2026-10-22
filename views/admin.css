@@ -319,7 +319,25 @@
   .modal-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--overlay); }
   .modal-backdrop.hidden { display: none; }
   .modal { width: 100%; max-width: 420px; max-height: calc(100vh - 32px); overflow: auto; padding: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+  .modal.modal-wide { max-width: 560px; }
   .modal h2 { margin: 0 0 6px; font-size: 17px; font-weight: 650; }
+  .version-badge {
+    flex: none; padding: 0 7px; border: 1px solid var(--line); border-radius: 999px; background: transparent;
+    color: var(--secondary); font: inherit; font-size: 11px; line-height: 1.7; cursor: pointer;
+  }
+  .version-badge:hover { border-color: var(--accent); color: var(--accent); }
+  .version-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: 10px; }
+  .version-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
+  .version-list li + li { border-top: 1px solid var(--line); }
+  .version-list .ver { flex: none; min-width: 34px; font-weight: 650; }
+  .version-list .info { flex: 1; min-width: 0; }
+  .version-list .msg { overflow: hidden; color: var(--text); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+  .version-list .msg.empty { color: var(--muted); font-style: italic; }
+  .version-list .sub { color: var(--muted); font-size: 12px; }
+  .version-list .current-tag { display: block; color: var(--accent); font-size: 11px; font-weight: 550; }
+  .version-list .ops { flex: none; display: flex; gap: 6px; }
+  .version-list .btn-confirm { border-color: var(--danger); color: var(--danger); }
+  .version-list .loading { color: var(--muted); font-size: 13px; }
   .modal > p, .modal p { margin: 0 0 14px; color: var(--secondary); font-size: 13.5px; line-height: 1.55; word-break: break-all; }
   .modal .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 18px; }
   .modal label { display: block; margin: 12px 0 5px; font-size: 13px; font-weight: 550; }
