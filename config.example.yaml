@@ -20,6 +20,8 @@ storage:
   site_dir: "./data/sites"
   # 元数据存放目录，每条上传一个 <id>.json
   meta_dir: "./data/meta"
+  # 页面模板目录（默认在 meta_dir 旁边的 templates/）
+  # template_dir: "./data/templates"
   # 0 = 永久保留；正数 = 超过该天数后永久删除（账户可单独覆盖）
   retention_days: 0
   # 单个上传文件大小上限（MB）；站点按 zip 包大小算
@@ -59,6 +61,8 @@ tokens:
     # max_storage_mb: 500
     # 可选：覆盖全局保留天数；0 表示该账户资源不自动清理
     # retention_days: 3
+    # 可选：允许用 dview template push --global 发布全局模板（所有账户都能匹配和使用）
+    # global_templates: true
     # 可选：配置级停用（也可用管理端一键停用，写入 data/account-state.json）
     # disabled: false
 

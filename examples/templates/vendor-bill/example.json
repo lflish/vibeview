@@ -1,0 +1,15 @@
+{
+  "vendor": "示例科技有限公司",
+  "customer": "示例客户",
+  "period": "2026-10",
+  "billNo": "BILL-202610-001",
+  "issueDate": "2026-11-01",
+  "currency": "¥",
+  "taxRate": 0.06,
+  "items": [
+    { "name": "云主机 4C8G", "unit": "台·月", "qty": 3, "price": 420 },
+    { "name": "对象存储", "unit": "TB·月", "qty": 2.5, "price": 120 },
+    { "name": "技术支持服务", "unit": "人天", "qty": 4, "price": 1500 }
+  ],
+  "notes": "请于 11 月 15 日前付款。\n如有疑问请联系对接人。"
+}

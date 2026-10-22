@@ -15,11 +15,12 @@
     "test:admin": "node scripts/test-admin-ui.js",
     "test:site": "node scripts/test-site.js",
     "test:versions": "node scripts/test-versions.js",
-    "test": "node scripts/test-retention.js && node scripts/test-metadata.js && node scripts/test-classification.js && node scripts/test-resource-index.js && node scripts/test-backup.js && node scripts/test-admin-login.js && npm run test:statistics && npm run test:site && npm run test:versions && bash scripts/smoke.sh",
+    "test:templates": "node scripts/test-templates.js",
+    "test": "node scripts/test-retention.js && node scripts/test-metadata.js && node scripts/test-classification.js && node scripts/test-resource-index.js && node scripts/test-backup.js && node scripts/test-admin-login.js && npm run test:statistics && npm run test:site && npm run test:versions && npm run test:templates && bash scripts/smoke.sh",
     "smoke": "bash scripts/smoke.sh",
     "test:statistics": "node scripts/test-statistics.js && node scripts/test-statistics-integration.js && node scripts/test-visits.js",
     "test:visits": "node scripts/test-visits.js",
-    "test:browser": "node scripts/test-theme.js && node scripts/test-admin-ui.js && node scripts/test-admin-login.js --browser && node scripts/test-statistics-integration.js --browser && node scripts/test-access.js --browser && node scripts/test-site.js --browser"
+    "test:browser": "node scripts/test-theme.js && node scripts/test-admin-ui.js && node scripts/test-admin-login.js --browser && node scripts/test-statistics-integration.js --browser && node scripts/test-access.js --browser && node scripts/test-site.js --browser && node scripts/test-templates.js --browser"
   },
   "dependencies": {
     "express": "^4.22.3",

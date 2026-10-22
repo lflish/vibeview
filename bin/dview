@@ -24,6 +24,13 @@ vibeview CLI — 上传并管理本账户预览资源（dview 与 vibeview 两�
                          在 git 仓库里上传时，.dview.json 记录"文件 → 资源"，
                          再次上传同一文件会更新原链接（生成新版本），而不是新建
   dview versions <id>     查看资源的版本列表
+  dview template list     可用的页面模板（自己的和全局的）
+  dview template match "<需求>"   按关键词找模板
+  dview template show <name>      模板的字段、示例数据和说明
+  dview template push <dir>       发布模板（新建或新版本）
+  dview template pull <name> [dir]  下载模板到本地修改
+  dview template delete <name>    删除自己的模板
+  dview render <name> --data <file.json>  用模板和数据生成页面并上传
   dview list              列出本账户资源（可用分类选项筛选）
   dview edit <id>         修改本账户资源的分类、标签、项目、agent 或描述
   dview delete <id>       删除本账户下的一条资源
@@ -42,6 +49,12 @@ vibeview CLI — 上传并管理本账户预览资源（dview 与 vibeview 两�
   --id ID                 更新指定资源（生成新版本，链接和访问码不变）
   --new                   忽略 .dview.json，强制新建资源
   --no-map                不读写 .dview.json
+
+模板选项:
+  --data FILE             render 的数据文件（JSON）；.dview.json 以它的路径为键
+  --out FILE              render 只生成页面保存到本地，不上传
+  --template NAME         upload 时使用自由排版的模板（记录模板，带上它的分类）
+  --global                template push 时发布为全局模板（需要账户权限）
   -h, --help              显示帮助
 
 分类选项（upload / edit 写入，list 用于筛选）:
@@ -66,6 +79,8 @@ vibeview CLI — 上传并管理本账户预览资源（dview 与 vibeview 两�
   dview upload ./snake.html --category game --tag h5,demo
   dview upload docs/prd/login.html -m "补充错误提示"   # 上传过则更新原链接
   dview versions Ab3xK9mP2qR7sT1v
+  dview template match "给 ACME 出 10 月账单"
+  dview render vendor-bill --data bills/acme-2026-10.json -m "补充 10 月明细"
   dview list --category report
   dview edit Ab3xK9mP2qR7sT1v --category doc --tag onboarding
   dview delete Ab3xK9mP2qR7sT1v
@@ -148,6 +163,10 @@ MESSAGE=""
 TARGET_ID=""
 FORCE_NEW=0
 USE_MAP=1
+DATA_FILE=""
+OUT_FILE=""
+TEMPLATE=""
+GLOBAL=""
 # 分类字段：L_<name> 为值，S_<name>=1 表示命令行显式给出（bash 3.2 无关联数组）
 L_category="" L_agent="" L_model="" L_project="" L_description=""
 S_category=0 S_agent=0 S_model=0 S_project=0 S_description=0
@@ -215,7 +234,16 @@ while [ "$#" -gt 0 ]; do
       USE_MAP=0
       shift
       ;;
-    upload|list|edit|delete|versions|me|whoami)
+    --data|--out|--template)
+      [ "$#" -ge 2 ] || { err "$1 需要参数"; exit 1; }
+      case "$1" in --data) DATA_FILE="$2" ;; --out) OUT_FILE="$2" ;; --template) TEMPLATE="$2" ;; esac
+      shift 2
+      ;;
+    --global)
+      GLOBAL=1
+      shift
+      ;;
+    upload|list|edit|delete|versions|template|render|me|whoami)
       if [ -n "$CMD" ]; then
         ARGS+=("$1")
         shift
@@ -424,6 +452,7 @@ cmd_upload() {
     if [ -n "$value" ]; then fields+=(--form-string "$key=$value"); fi
   done
   if [ -n "$TAGS" ]; then fields+=(--form-string "tags=$TAGS"); fi
+  if [ -n "$TEMPLATE" ]; then fields+=(--form-string "template=$TEMPLATE"); fi
 
   # 更新还是新建：--id > .dview.json 映射（--new 时跳过）> 新建
   local target="$TARGET_ID" from_map=0 commit
@@ -509,6 +538,334 @@ for v in reversed(data.get("versions") or []):
     print("%-6s %-19s %10s  %-14s %s" % (label, str(v.get("createdAt") or "")[:19], "{:,}".format(int(v.get("size") or 0)), commit, v.get("message") or ""))
     print("       " + str(v.get("url") or ""))
 '
+}
+
+# ---- 页面模板 ----
+# 运行一段 JSON 处理代码：优先 python3（sys.argv[1:] 为参数），否则 node（process.argv.slice(1)）。
+json_tool() {
+  local py="$1" js="$2"
+  shift 2
+  if command -v python3 >/dev/null 2>&1; then python3 -c "$py" "$@"; return; fi
+  if command -v node >/dev/null 2>&1; then node -e "$js" "$@"; return; fi
+  err "需要 python3 或 node"
+  return 1
+}
+
+check_template_name() {
+  if ! printf '%s' "$1" | grep -Eq '^[a-z0-9][a-z0-9-]{0,62}$'; then
+    err "模板名称只能用小写字母、数字和 -: $1"
+    exit 1
+  fi
+}
+
+# 打印接口返回的错误，以及逐条的 details（模板校验、数据校验）
+show_api_error() {
+  local what="$1"
+  err "${what}失败 (HTTP ${HTTP_CODE})"
+  printf '%s' "$BODY" | json_tool '
+import json, sys
+raw = sys.stdin.read()
+try:
+    d = json.loads(raw)
+except Exception:
+    print(raw); raise SystemExit(0)
+print("  " + str(d.get("error", "")))
+for line in d.get("details") or []:
+    print("  - " + str(line))
+' '
+let s = ""; process.stdin.on("data", (c) => (s += c)); process.stdin.on("end", () => {
+  try { const d = JSON.parse(s); console.log("  " + (d.error || "")); for (const l of d.details || []) console.log("  - " + l); }
+  catch { console.log(s); }
+});' >&2 || printf '%s\n' "$BODY" >&2
+}
+
+# 本次上传在 git 仓库里时，带上 commit；被上传的文件有未提交改动时标记 dirty。结果放在 GIT_COMMIT / GIT_DIRTY。
+git_note() {
+  GIT_COMMIT="" GIT_DIRTY=""
+  [ -n "$REPO_ROOT" ] || return 0
+  GIT_COMMIT="$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD 2>/dev/null || true)"
+  if [ -n "$GIT_COMMIT" ] && [ -n "$(git -C "$REPO_ROOT" status --porcelain -- "${MAP_KEY:-.}" 2>/dev/null)" ]; then GIT_DIRTY=1; fi
+}
+
+template_list() {
+  http GET "${BASE}/api/templates"
+  [ "$HTTP_CODE" = "200" ] || { show_api_error "查询"; exit 1; }
+  if [ "$UPLOAD_JSON" = "1" ] || ! command -v python3 >/dev/null 2>&1; then json_pretty "$BODY"; return; fi
+  DVIEW_JSON="$BODY" python3 -c '
+import json, os
+items = json.loads(os.environ["DVIEW_JSON"]).get("templates") or []
+if not items:
+    print("(没有模板；用 dview template push <目录> 发布)"); raise SystemExit(0)
+print("%-24s %-5s %-6s %-14s %s" % ("NAME", "VER", "SCOPE", "FEATURES", "TITLE / KEYWORDS"))
+for t in items:
+    scope = "global" if t.get("global") else "mine"
+    print("%-24s v%-4s %-6s %-14s %s" % (t["name"], t.get("version"), scope, ",".join(t.get("features") or []) or "-", t.get("title", "")))
+    print("%-53s 关键词: %s" % ("", "、".join(t.get("match") or [])))
+'
+}
+
+template_match() {
+  local query="${ARGS[*]:1}"
+  [ -n "$query" ] || { err "用法: dview template match \"<需求描述>\""; exit 1; }
+  http GET "${BASE}/api/templates/match" -G --data-urlencode "q=${query}"
+  [ "$HTTP_CODE" = "200" ] || { show_api_error "匹配"; exit 1; }
+  if [ "$UPLOAD_JSON" = "1" ] || ! command -v python3 >/dev/null 2>&1; then json_pretty "$BODY"; return; fi
+  DVIEW_JSON="$BODY" python3 -c '
+import json, os
+items = json.loads(os.environ["DVIEW_JSON"]).get("templates") or []
+if not items:
+    print("没有匹配的模板，按普通方式生成页面"); raise SystemExit(0)
+for t in items:
+    print("%s  （命中: %s）" % (t["name"], "、".join(t.get("matched") or [])))
+    print("  " + t.get("description", ""))
+if len(items) > 1:
+    print("\n命中多个模板，请让用户选择")
+'
+}
+
+template_show() {
+  local name="${ARGS[1]:-}"
+  [ -n "$name" ] || { err "用法: dview template show <name>"; exit 1; }
+  check_template_name "$name"
+  http GET "${BASE}/api/templates/${name}"
+  [ "$HTTP_CODE" = "200" ] || { show_api_error "查询"; exit 1; }
+  if [ "$UPLOAD_JSON" = "1" ] || ! command -v python3 >/dev/null 2>&1; then json_pretty "$BODY"; return; fi
+  DVIEW_JSON="$BODY" python3 -c '
+import json, os
+t = json.loads(os.environ["DVIEW_JSON"])
+print("%s  v%s  %s" % (t["name"], t["version"], "全局模板" if t.get("global") else "本账户模板"))
+print("%s：%s" % (t.get("title", ""), t.get("description", "")))
+print("关键词：" + "、".join(t.get("match") or []))
+print("排版：" + ("固定（用 dview render 生成）" if t.get("layout") else "自由（自己生成 HTML，dview upload --template " + t["name"] + "）"))
+if t.get("features"): print("功能：" + "、".join(t["features"]))
+if t.get("pageTitle"): print("页面标题：" + t["pageTitle"])
+if t.get("fields"):
+    print("\n字段：")
+    for f in t["fields"]:
+        note = " ".join(x for x in [f.get("title", ""), f.get("description", ""), ("可选值 " + " / ".join(map(str, f["enum"]))) if f.get("enum") else ""] if x)
+        print("  %-22s %-8s %-4s %s" % (f["path"], f.get("type", ""), "必填" if f.get("required") else "", note))
+if t.get("example") is not None:
+    print("\n示例数据：")
+    print(json.dumps(t["example"], ensure_ascii=False, indent=2))
+if t.get("guide"):
+    print("\n说明：")
+    print(t["guide"].rstrip())
+'
+}
+
+template_push() {
+  local dir="${ARGS[1]:-}"
+  [ -n "$dir" ] && [ -f "$dir/template.json" ] || { err "用法: dview template push <模板目录>（目录里需要 template.json）"; exit 1; }
+  local body name
+  TMP_BODY="$(mktemp "${TMPDIR:-/tmp}/dview-template.XXXXXX")"
+  trap 'rm -f "${TMP_BODY:-}"' EXIT
+  body="$TMP_BODY"
+  name="$(DVIEW_MESSAGE="$MESSAGE" DVIEW_GLOBAL="$GLOBAL" json_tool '
+import json, os, sys
+src, out = sys.argv[1], sys.argv[2]
+files = {}
+for name in sorted(os.listdir(src)):
+    path = os.path.join(src, name)
+    if name.startswith("."):
+        continue
+    if os.path.isdir(path):
+        sys.exit("模板目录不能有子目录: " + name)
+    with open(path, encoding="utf-8") as f:
+        files[name] = f.read()
+manifest = json.loads(files["template.json"])
+body = {"files": files, "message": os.environ.get("DVIEW_MESSAGE", "")}
+if os.environ.get("DVIEW_GLOBAL") == "1":
+    body["global"] = True
+with open(out, "w", encoding="utf-8") as f:
+    json.dump(body, f, ensure_ascii=False)
+print(manifest.get("name", ""))
+' '
+const fs = require("fs"), path = require("path");
+const [src, out] = process.argv.slice(1);
+const files = {};
+for (const name of fs.readdirSync(src).sort()) {
+  if (name.startsWith(".")) continue;
+  const p = path.join(src, name);
+  if (fs.statSync(p).isDirectory()) { console.error("模板目录不能有子目录: " + name); process.exit(1); }
+  files[name] = fs.readFileSync(p, "utf8");
+}
+const manifest = JSON.parse(files["template.json"]);
+const body = { files, message: process.env.DVIEW_MESSAGE || "" };
+if (process.env.DVIEW_GLOBAL === "1") body.global = true;
+fs.writeFileSync(out, JSON.stringify(body));
+console.log(manifest.name || "");
+' "$dir" "$body")" || { err "无法读取模板目录 $dir（template.json 需要是合法的 JSON）"; exit 1; }
+  check_template_name "$name"
+  http PUT "${BASE}/api/templates/${name}" -H 'Content-Type: application/json' --data-binary "@${body}"
+  [ "$HTTP_CODE" = "200" ] || { show_api_error "发布模板"; exit 1; }
+  if [ "$UPLOAD_JSON" = "1" ]; then printf '%s\n' "$BODY"; return; fi
+  printf '已发布模板 %s v%s%s\n' "$name" "$(json_field version "$BODY" || true)" "$( [ "$(json_field global "$BODY" || true)" = "True" ] || [ "$(json_field global "$BODY" || true)" = "true" ] && printf '（全局）')"
+}
+
+template_pull() {
+  local name="${ARGS[1]:-}" dir="${ARGS[2]:-}"
+  [ -n "$name" ] || { err "用法: dview template pull <name> [目录]"; exit 1; }
+  check_template_name "$name"
+  [ -n "$dir" ] || dir="./$name"
+  if [ -e "$dir" ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then err "目录不为空: $dir（换一个目录，避免覆盖本地修改）"; exit 1; fi
+  http GET "${BASE}/api/templates/${name}/files"
+  [ "$HTTP_CODE" = "200" ] || { show_api_error "下载模板"; exit 1; }
+  mkdir -p "$dir"
+  printf '%s' "$BODY" | json_tool '
+import json, os, sys
+d = json.load(sys.stdin)
+for name, content in d["files"].items():
+    if "/" in name or "\\" in name or name.startswith("."):
+        continue
+    with open(os.path.join(sys.argv[1], name), "w", encoding="utf-8") as f:
+        f.write(content)
+' '
+let s = ""; process.stdin.on("data", (c) => (s += c)); process.stdin.on("end", () => {
+  const fs = require("fs"), path = require("path"); const d = JSON.parse(s);
+  for (const [name, content] of Object.entries(d.files)) {
+    if (/[\\/]/.test(name) || name.startsWith(".")) continue;
+    fs.writeFileSync(path.join(process.argv[1], name), content);
+  }
+});' "$dir"
+  printf '已下载 %s v%s 到 %s\n' "$name" "$(json_field version "$BODY" || true)" "$dir"
+}
+
+template_delete() {
+  local name="${ARGS[1]:-}"
+  [ -n "$name" ] || { err "用法: dview template delete <name>"; exit 1; }
+  check_template_name "$name"
+  http DELETE "${BASE}/api/templates/${name}"
+  [ "$HTTP_CODE" = "200" ] || { show_api_error "删除模板"; exit 1; }
+  printf '已删除模板 %s（已生成的页面不受影响）\n' "$name"
+}
+
+cmd_template() {
+  require_auth
+  case "${ARGS[0]:-}" in
+    list) template_list ;;
+    match) template_match ;;
+    show) template_show ;;
+    push) template_push ;;
+    pull) template_pull ;;
+    delete|rm) template_delete ;;
+    *) err "用法: dview template list | match \"<需求>\" | show <name> | push <dir> | pull <name> [dir] | delete <name>"; exit 1 ;;
+  esac
+}
+
+# 用模板和数据生成页面：服务端校验并渲染，结果和普通上传一样（访问码、版本、.dview.json）。
+cmd_render() {
+  require_auth
+  local name="${ARGS[0]:-}"
+  if [ -z "$name" ] || [ -z "$DATA_FILE" ]; then
+    err "用法: dview render <模板名> --data <数据.json> [--json] [-m 说明] [--id ID | --new] [--out page.html]"
+    exit 1
+  fi
+  check_template_name "$name"
+  [ -f "$DATA_FILE" ] || { err "数据文件不存在: $DATA_FILE"; exit 1; }
+
+  local target="$TARGET_ID" from_map=0 keys="" dry=0
+  REPO_ROOT="" MAP_KEY=""
+  if [ -n "$OUT_FILE" ]; then
+    dry=1
+  else
+    if [ "$USE_MAP" = "1" ]; then resolve_map_key "$DATA_FILE"; fi
+    if [ -z "$target" ] && [ "$FORCE_NEW" = "0" ] && [ -n "$MAP_KEY" ] && [ -f "$REPO_ROOT/.dview.json" ]; then
+      target="$(map_tool get "$REPO_ROOT/.dview.json" "$MAP_KEY" 2>/dev/null || true)"
+      if [ -n "$target" ]; then from_map=1; fi
+    fi
+    if [ "$DETECT" = "1" ]; then
+      [ -n "$L_agent" ] || L_agent="$(detect_agent)"
+      [ -n "$L_project" ] || L_project="$(detect_project "$DATA_FILE")"
+    fi
+    [ -n "$L_model" ] || L_model="${DVIEW_MODEL:-}"
+    git_note
+  fi
+
+  # 只发送有值的字段
+  local -a env=()
+  add_field() { if [ -n "$2" ]; then keys="$keys $1"; env+=("DVIEW_BODY_$1=$2"); fi; }
+  add_field id "$target"
+  add_field message "$MESSAGE"
+  add_field category "$L_category"
+  add_field agent "$L_agent"
+  add_field model "$L_model"
+  add_field project "$L_project"
+  add_field description "$L_description"
+  add_field tags "$TAGS"
+  add_field access_days "$ACCESS_DAYS"
+  if [ "$UPLOAD_PUBLIC" = "1" ]; then add_field access_mode public; fi
+  add_field git_commit "${GIT_COMMIT:-}"
+  add_field git_dirty "${GIT_DIRTY:-}"
+
+  local body
+  TMP_BODY="$(mktemp "${TMPDIR:-/tmp}/dview-render.XXXXXX")"
+  trap 'rm -f "${TMP_BODY:-}"' EXIT
+  body="$TMP_BODY"
+  (
+  for pair in ${env[@]+"${env[@]}"}; do export "$pair"; done
+  DVIEW_BODY_KEYS="$keys" DVIEW_BODY_DRY="$dry" json_tool '
+import json, os, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        data = json.load(f)
+except ValueError as e:
+    sys.exit("数据文件不是合法的 JSON: %s" % e)
+body = {"data": data}
+for key in os.environ.get("DVIEW_BODY_KEYS", "").split():
+    body[key] = os.environ.get("DVIEW_BODY_" + key, "")
+if os.environ.get("DVIEW_BODY_DRY") == "1":
+    body["dry_run"] = True
+with open(sys.argv[2], "w", encoding="utf-8") as f:
+    json.dump(body, f, ensure_ascii=False)
+' '
+const fs = require("fs");
+const [src, out] = process.argv.slice(1);
+let data;
+try { data = JSON.parse(fs.readFileSync(src, "utf8")); } catch (e) { console.error("数据文件不是合法的 JSON: " + e.message); process.exit(1); }
+const body = { data };
+for (const k of (process.env.DVIEW_BODY_KEYS || "").split(/\s+/).filter(Boolean)) body[k] = process.env["DVIEW_BODY_" + k] || "";
+if (process.env.DVIEW_BODY_DRY === "1") body.dry_run = true;
+fs.writeFileSync(out, JSON.stringify(body));
+' "$DATA_FILE" "$body"
+  ) || exit 1
+
+  http POST "${BASE}/api/templates/${name}/render" -H 'Content-Type: application/json' --data-binary "@${body}"
+  if [ "$HTTP_CODE" != "200" ]; then
+    show_api_error "生成"
+    if [ "$from_map" = "1" ] && { [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "403" ]; }; then
+      err ".dview.json 里 ${MAP_KEY} 对应的资源 ${target} 已不存在或不属于当前账户。用 --new 新建（会更新映射），或用 --id 指定要更新的资源"
+    fi
+    exit 1
+  fi
+
+  if [ -n "$OUT_FILE" ]; then
+    printf '%s' "$BODY" | json_tool '
+import json, sys
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    f.write(json.load(sys.stdin)["html"])
+' '
+let s = ""; process.stdin.on("data", (c) => (s += c)); process.stdin.on("end", () => require("fs").writeFileSync(process.argv[1], JSON.parse(s).html));
+' "$OUT_FILE"
+    printf '已生成 %s（未上传）\n' "$OUT_FILE"
+    return
+  fi
+
+  local new_id updated
+  new_id="$(json_field id "$BODY" || true)"
+  if [ -n "$MAP_KEY" ] && [ -n "$new_id" ] && [ "$from_map" = "0" ]; then
+    if map_tool set "$REPO_ROOT/.dview.json" "$MAP_KEY" "$new_id" 2>/dev/null; then
+      printf '已记录到 .dview.json: %s → %s（请提交进 git）\n' "$MAP_KEY" "$new_id" >&2
+    fi
+  fi
+  if [ "$UPLOAD_JSON" = "1" ]; then printf '%s\n' "$BODY"; return; fi
+  printf '%s\n' "$(json_field url "$BODY")"
+  updated="$(json_field updated "$BODY" || true)"
+  if [ "$updated" = "True" ] || [ "$updated" = "true" ]; then
+    printf '已更新为第 %s 版，链接和访问码不变\n' "$(json_field version "$BODY" || true)" >&2
+  fi
+  local access_code
+  access_code="$(json_field accessCode "$BODY" || true)"
+  if [ -n "$access_code" ]; then printf '访问码（请单独分享并保存）: %s\n' "$access_code" >&2; fi
 }
 
 cmd_list() {
@@ -611,6 +968,8 @@ case "$CMD" in
   edit) cmd_edit ;;
   delete) cmd_delete ;;
   versions) cmd_versions ;;
+  template) cmd_template ;;
+  render) cmd_render ;;
   me|whoami) cmd_me ;;
   *)
     err "未知命令: $CMD"

@@ -88,11 +88,11 @@ function backup(options) {
       record(member, source);
     }
 
-    const uploads = { html: config.storage.htmlDir, images: config.storage.imageDir, videos: config.storage.videoDir, sites: config.storage.siteDir };
+    const uploads = { html: config.storage.htmlDir, images: config.storage.imageDir, videos: config.storage.videoDir, sites: config.storage.siteDir, templates: config.storage.templateDir };
     const tarArgs = ['-czf', partial, '-C', staging, '.'];
     for (const [member, dir] of Object.entries(uploads)) {
       if (!fs.existsSync(dir)) continue;
-      // 包内统一叫 html/images/videos/sites，原路径记在 manifest 里；只有改过目录名时才需要 GNU tar 的改名。
+      // 包内统一叫 html/images/videos/sites/templates，原路径记在 manifest 里；只有改过目录名时才需要 GNU tar 的改名。
       const base = path.basename(dir);
       // 站点上传中途的临时 zip 不备份
       if (member === 'sites') tarArgs.push(`--exclude=${base}/.incoming`);

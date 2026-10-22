@@ -61,6 +61,13 @@ creates a new version at the same URL with the same access code. Add `-m "what c
 commit `.dview.json`, use `--id <id>` to update a specific resource, and `--new` to force a new one.
 Version history: `dview versions <id>`; version `n` is at `/v/<id>/@<n>`.
 
+Page templates fix the layout of recurring pages (bills, reports). Before generating a page, run
+`dview template match "<the user's request>" --json`. On a single match, read `dview template show <name>`
+and follow its guide: for a fixed layout write only the data as JSON and run
+`dview render <name> --data <file.json> --json` (do not write HTML or compute totals); for a free layout
+generate the HTML and upload it with `--template <name>`. Ask the user when several templates match.
+Details: `skill/dview-upload/SKILL.md`, `docs/specs/page-templates.md`.
+
 Choose a mode before generating a page. Use a **single self-contained HTML file** by default.
 Use a **multi-page site** only when the work needs two or more pages that link to each other, separate
 asset files (images, data, fonts), is a front-end build (`dist/`), or would exceed about 1 MB as one file.
