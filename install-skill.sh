@@ -185,6 +185,15 @@ if [ -n "$URL" ] && [ -n "$TOKEN" ]; then
   info "已写入环境变量到 $RC（重开终端或执行 source $RC 生效）"
 fi
 
+# ---- 同步模板配套 skill（失败不影响安装）----
+if [ "$INSTALL_CLAUDE" = "1" ] && [ -n "$CLI_PATH" ] && [ -n "$URL" ] && [ -n "$TOKEN" ] && command -v node >/dev/null 2>&1; then
+  if CLAUDE_SKILLS_DIR="$SKILLS_DIR" DVIEW_URL="$URL" DVIEW_TOKEN="$TOKEN" bash "$CLI_PATH" template skills sync >/dev/null 2>&1; then
+    info "已同步模板 skill（dview-tpl-*）；模板更新后运行 dview template skills sync"
+  else
+    warn "模板 skill 未同步，可稍后运行 dview template skills sync"
+  fi
+fi
+
 echo ""
 info "安装完成 ✅"
 [ "$INSTALL_CLAUDE" = "1" ] && echo "  Skill 位置: $DEST"

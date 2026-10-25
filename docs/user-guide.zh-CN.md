@@ -161,7 +161,7 @@ dview template pull vendor-bill ./my-bill             # 下载到本地修改
 dview template list / delete <name>
 ```
 
-`examples/templates/vendor-bill/` 是一个完整的示例，可以复制后修改。一个模板目录包含：
+`examples/templates/` 里有两个完整的示例，可以复制后修改：`vendor-bill`（月度账单，带打印和导出 Excel）和 `aibot-compare`（AI Bot 多角度对比，1200px 宽的卡片，可选深色，适合截图发推特）。一个模板目录包含：
 
 | 文件 | 说明 |
 | --- | --- |
@@ -179,6 +179,7 @@ dview template list / delete <name>
 - **版本**：每次 `push` 生成模板的新版本，保留最近 50 个；每个账户最多 100 个模板。已生成的页面不随模板改动，删除模板后也照常打开和导出；再次渲染时使用模板的最新版本。
 - **全局模板**：模板默认只有发布它的账户能用。在 `config.yaml` 里给账户加上 `global_templates: true` 后，可以用 `dview template push <dir> --global` 发布给所有账户；管理员也可以用 `PATCH /admin/api/templates/:id` 切换。按名称查找时，自己的模板优先于同名的全局模板。
 - **匹配**：用户原话里出现模板的任一关键词即命中（不区分大小写和全角半角），按命中的关键词数量排序。
+- **配套 skill**：`dview template skills sync` 为模板生成本机的 Claude Code skill（`~/.claude/skills/dview-tpl-<模板名>/`），内容是模板的步骤、说明、字段和示例。agent 听到相关的请求会直接触发它，不用先查关键词。默认只同步自己的模板，`--global` 同时同步全局模板（它们的说明由别的账户编写），`--only <名称>` 只同步指定模板，`--dir` 写到其他 agent 的 skill 目录。`dview template push` / `delete` 会自动同步本机，`install-skill.sh` 安装后也会同步一次；模板在别处更新后，再运行一次 `sync`。生成的目录带有 `.dview-template.json` 标记，同步只处理这些目录，不会动你自己的 skill。
 
 ### 分类、项目与标签
 

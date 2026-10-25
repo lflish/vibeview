@@ -1,0 +1,26 @@
+{
+  "title": "AI Bot 横向对比",
+  "subtitle": "示例数据：从能力、集成、部署和成本四个方面看几个 AI 机器人",
+  "asOf": "2026-10",
+  "theme": "light",
+  "highlight": "mine",
+  "bots": [
+    { "id": "mine", "name": "你的 Bot", "vendor": "开源项目", "tagline": "开源 · 可自托管" },
+    { "id": "a", "name": "示例 Bot A", "vendor": "厂商 A", "tagline": "通用对话助手" },
+    { "id": "b", "name": "示例 Bot B", "vendor": "厂商 B", "tagline": "社交平台内置" },
+    { "id": "c", "name": "示例 Bot C", "vendor": "厂商 C", "tagline": "企业协作" }
+  ],
+  "dimensions": [
+    { "group": "能力", "name": "多模型切换", "values": [{ "level": "yes", "text": "任意兼容模型" }, { "level": "no", "text": "仅自家模型" }, { "level": "no" }, { "level": "partial", "text": "2 个可选" }] },
+    { "group": "能力", "name": "图片理解", "values": [{ "level": "yes" }, { "level": "yes" }, { "level": "yes" }, { "level": "partial", "text": "需企业版" }] },
+    { "group": "能力", "name": "联网搜索", "values": [{ "level": "partial", "text": "插件" }, { "level": "yes" }, { "level": "yes", "text": "实时社交数据" }, { "level": "no" }] },
+    { "group": "集成", "name": "接入 X / Telegram / Discord", "values": [{ "level": "yes", "text": "三者都支持" }, { "level": "no" }, { "level": "partial", "text": "仅 X" }, { "level": "no" }] },
+    { "group": "集成", "name": "自定义工具 / 插件", "values": [{ "level": "yes" }, { "level": "partial", "text": "官方插件" }, { "level": "no" }, { "level": "yes" }] },
+    { "group": "部署", "name": "自托管", "values": [{ "level": "yes", "text": "Docker 一键" }, { "level": "no" }, { "level": "no" }, { "level": "partial", "text": "私有云" }] },
+    { "group": "部署", "name": "数据留在本地", "values": [{ "level": "yes" }, { "level": "no" }, { "level": "no" }, { "level": "partial" }] },
+    { "group": "成本", "name": "免费使用", "values": [{ "level": "yes", "text": "开源免费" }, { "level": "partial", "text": "有免费额度" }, { "level": "partial", "text": "需订阅" }, { "level": "no", "text": "按席位" }] },
+    { "group": "成本", "name": "开源许可", "values": [{ "level": "yes", "text": "MIT" }, { "level": "no" }, { "level": "no" }, { "level": "unknown" }] }
+  ],
+  "sources": ["示例数据，仅用于展示模板效果，不代表任何真实产品"],
+  "footer": { "text": "你的项目 · 一句话介绍", "handle": "@yourname", "url": "github.com/you/project" }
+}

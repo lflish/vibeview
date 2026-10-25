@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Bot 对比</title>
+<style>
+  :root {
+    --bg: #f6f8fb; --surface: #ffffff; --text: #1e293b; --muted: #64748b; --faint: #94a3b8; --line: #e2e8f0;
+    --accent: #2563eb; --accent-soft: #eff6ff; --accent-line: #bfdbfe;
+    --yes: #15803d; --yes-bg: #dcfce7; --partial: #b45309; --partial-bg: #fef3c7;
+    --no: #64748b; --no-bg: #f1f5f9; --unknown: #94a3b8;
+    --shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 12px 32px rgba(15, 23, 42, .08);
+  }
+  [data-theme="dark"] {
+    --bg: #070b14; --surface: #0f172a; --text: #e2e8f0; --muted: #94a3b8; --faint: #64748b; --line: #1e293b;
+    --accent: #60a5fa; --accent-soft: rgba(96, 165, 250, .10); --accent-line: rgba(96, 165, 250, .45);
+    --yes: #4ade80; --yes-bg: rgba(74, 222, 128, .12); --partial: #fbbf24; --partial-bg: rgba(251, 191, 36, .12);
+    --no: #94a3b8; --no-bg: rgba(148, 163, 184, .10); --unknown: #64748b;
+    --shadow: 0 0 0 1px #1e293b, 0 20px 48px rgba(0, 0, 0, .45);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 15px/1.5 "Inter", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; }
+  .stage { padding: 40px 16px; overflow-x: auto; }
+  /* 卡片固定 1200px 宽：截图后直接是推特配图的宽度 */
+  .card { width: 1200px; margin: 0 auto; padding: 48px 52px 36px; background: var(--surface); border-radius: 20px; box-shadow: var(--shadow); }
+  .eyebrow { display: flex; align-items: center; gap: 10px; color: var(--accent); font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+  .eyebrow::before { content: ""; width: 28px; height: 3px; border-radius: 2px; background: var(--accent); }
+  h1 { margin: 12px 0 6px; font-size: 40px; line-height: 1.15; letter-spacing: -.02em; }
+  .subtitle { margin: 0; max-width: 900px; color: var(--muted); font-size: 17px; }
+  .subtitle:empty { display: none; }
+
+  table { width: 100%; margin-top: 28px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+  col.dim { width: 230px; }
+  th, td { padding: 0 10px; vertical-align: middle; }
+  /* 表头单元格不留内边距：高亮列的表头和下面的单元格同宽、上下连成一列 */
+  thead th { padding: 0; text-align: center; font-weight: 400; vertical-align: bottom; }
+  .bot { padding: 14px 12px 16px; border-radius: 14px 14px 0 0; }
+  .bot .name { font-size: 18px; font-weight: 750; letter-spacing: -.01em; }
+  .bot .vendor { margin-top: 2px; color: var(--muted); font-size: 12.5px; }
+  .bot .tagline { margin-top: 6px; color: var(--faint); font-size: 12px; }
+  .badge { display: inline-block; margin-bottom: 8px; padding: 2px 10px; border-radius: 999px; background: var(--accent); color: var(--surface); font-size: 11.5px; font-weight: 700; letter-spacing: .04em; }
+  th.hl .bot, td.hl { background: var(--accent-soft); box-shadow: inset 1px 0 0 var(--accent-line), inset -1px 0 0 var(--accent-line); }
+  th.hl .bot { box-shadow: inset 1px 0 0 var(--accent-line), inset -1px 0 0 var(--accent-line), inset 0 1px 0 var(--accent-line); }
+  tr.last td.hl { border-radius: 0 0 14px 14px; box-shadow: inset 1px 0 0 var(--accent-line), inset -1px 0 0 var(--accent-line), inset 0 -1px 0 var(--accent-line); }
+
+  tr.group td { padding: 14px 10px 4px; color: var(--accent); font-size: 12.5px; font-weight: 700; letter-spacing: .08em; }
+  tr.group td.hl { padding: 0; }
+  tr.row td { height: 50px; border-top: 1px solid var(--line); }
+  tr.row.first td { border-top-color: transparent; }
+  .dim-name { font-weight: 600; font-size: 15px; }
+  .dim-note { color: var(--faint); font-size: 12px; line-height: 1.35; }
+  td.cell { text-align: center; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 11px 4px 5px; border-radius: 999px; font-size: 13px; font-weight: 600; line-height: 1.3; }
+  .chip .icon { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; font-size: 12px; font-weight: 800; }
+  .chip .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .yes { background: var(--yes-bg); color: var(--yes); }
+  .yes .icon { background: var(--yes); color: var(--surface); }
+  .partial { background: var(--partial-bg); color: var(--partial); }
+  .partial .icon { background: var(--partial); color: var(--surface); }
+  .no { background: var(--no-bg); color: var(--no); font-weight: 500; }
+  .no .icon { background: transparent; border: 1.5px solid var(--no); }
+  .unknown { color: var(--unknown); font-weight: 500; padding-left: 11px; border: 1px dashed var(--unknown); background: transparent; }
+  .unknown .icon { display: none; }
+
+  tr.score td { padding-top: 18px; padding-bottom: 16px; border-top: 2px solid var(--line); }
+  .score-label { font-weight: 700; }
+  .score-help { color: var(--faint); font-size: 12px; }
+  .bar { height: 8px; margin: 0 6px 6px; border-radius: 999px; background: var(--no-bg); overflow: hidden; }
+  .bar span { display: block; height: 100%; border-radius: inherit; background: var(--faint); }
+  td.hl .bar span { background: var(--accent); }
+  .pct { text-align: center; font-size: 22px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .pct small { margin-left: 4px; color: var(--muted); font-size: 12px; font-weight: 500; }
+
+  footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line); }
+  .meta { max-width: 640px; color: var(--faint); font-size: 12px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 6px; color: var(--muted); }
+  .legend .chip { padding: 0; background: transparent; font-weight: 500; }
+  .legend .unknown { padding: 0 8px; }
+  .brand { text-align: right; }
+  .brand .text { font-size: 15px; font-weight: 700; }
+  .brand .links { color: var(--accent); font-size: 13.5px; font-weight: 600; }
+  .brand .credit { margin-top: 2px; color: var(--faint); font-size: 11.5px; }
+  @media print { body { background: #fff; } .stage { padding: 0; } .card { box-shadow: none; } }
+</style>
+</head>
+<body>
+<div class="stage">
+  <article class="card">
+    <div class="eyebrow" id="eyebrow">Comparison</div>
+    <h1 id="title"></h1>
+    <p class="subtitle" id="subtitle"></p>
+    <table>
+      <colgroup id="cols"><col class="dim"></colgroup>
+      <thead><tr id="head"><th></th></tr></thead>
+      <tbody id="body"></tbody>
+    </table>
+    <footer>
+      <div class="meta">
+        <div class="legend" id="legend"></div>
+        <div id="sources"></div>
+      </div>
+      <div class="brand">
+        <div class="text" id="footText"></div>
+        <div class="links" id="footLinks"></div>
+        <div class="credit">Rendered with vibeview · github.com/lflish/vibeview</div>
+      </div>
+    </footer>
+  </article>
+</div>
+<script>
+  // 数据由 vibeview 注入：window.DVIEW_DATA。所有文本用 textContent，不当作 HTML。
+  (function () {
+    var d = window.DVIEW_DATA;
+    var LEVELS = {
+      yes: { icon: '✓', label: '支持', score: 1 },
+      partial: { icon: '◐', label: '部分', score: 0.5 },
+      no: { icon: '✕', label: '不支持', score: 0 },
+      unknown: { icon: '?', label: '未知', score: null }
+    };
+    var el = function (tag, cls, text) {
+      var node = document.createElement(tag);
+      if (cls) node.className = cls;
+      if (text !== undefined && text !== null && text !== '') node.textContent = text;
+      return node;
+    };
+    var chip = function (level, text) {
+      var info = LEVELS[level] || LEVELS.unknown;
+      var node = el('span', 'chip ' + (LEVELS[level] ? level : 'unknown'));
+      node.appendChild(el('span', 'icon', info.icon));
+      var label = el('span', 'label', text || info.label);
+      if (text) label.title = text;
+      node.appendChild(label);
+      return node;
+    };
+
+    if (d.theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    document.getElementById('eyebrow').textContent = 'Comparison · ' + d.asOf;
+    document.getElementById('title').textContent = d.title;
+    if (d.subtitle) document.getElementById('subtitle').textContent = d.subtitle;
+
+    var bots = d.bots;
+    var hl = bots.map(function (b) { return b.id === d.highlight; });
+    var cols = document.getElementById('cols');
+    var head = document.getElementById('head');
+    bots.forEach(function (bot, i) {
+      cols.appendChild(document.createElement('col'));
+      var th = el('th', hl[i] ? 'hl' : '');
+      var box = el('div', 'bot');
+      if (hl[i]) box.appendChild(el('div', 'badge', '★ 本项目'));
+      box.appendChild(el('div', 'name', bot.name));
+      if (bot.vendor) box.appendChild(el('div', 'vendor', bot.vendor));
+      if (bot.tagline) box.appendChild(el('div', 'tagline', bot.tagline));
+      th.appendChild(box);
+      head.appendChild(th);
+    });
+
+    // 行：相邻同名分组合并成一个分组标题
+    var body = document.getElementById('body');
+    var totals = bots.map(function () { return { sum: 0, count: 0 }; });
+    var lastGroup = null;
+    var firstInGroup = true;
+    d.dimensions.forEach(function (dim) {
+      if (dim.group && dim.group !== lastGroup) {
+        var g = el('tr', 'group');
+        g.appendChild(el('td', '', dim.group));
+        bots.forEach(function (_, i) { g.appendChild(el('td', hl[i] ? 'hl' : '')); });
+        body.appendChild(g);
+        firstInGroup = true;
+      }
+      lastGroup = dim.group || lastGroup;
+      var tr = el('tr', 'row' + (firstInGroup ? ' first' : ''));
+      firstInGroup = false;
+      var name = el('td');
+      name.appendChild(el('div', 'dim-name', dim.name));
+      if (dim.note) name.appendChild(el('div', 'dim-note', dim.note));
+      tr.appendChild(name);
+      bots.forEach(function (_, i) {
+        var v = dim.values[i] || { level: 'unknown' };
+        var td = el('td', 'cell' + (hl[i] ? ' hl' : ''));
+        td.appendChild(chip(v.level, v.text));
+        tr.appendChild(td);
+        var s = (LEVELS[v.level] || LEVELS.unknown).score;
+        if (s !== null) { totals[i].sum += s; totals[i].count += 1; }
+      });
+      body.appendChild(tr);
+    });
+
+    // 覆盖度：支持记 1、部分记 0.5，未知的不计入
+    var score = el('tr', 'score last');
+    var label = el('td');
+    label.appendChild(el('div', 'score-label', '覆盖度'));
+    label.appendChild(el('div', 'score-help', '支持 1 分 · 部分 0.5 分 · 未知不计'));
+    score.appendChild(label);
+    bots.forEach(function (_, i) {
+      var t = totals[i];
+      var pct = t.count ? Math.round(t.sum / t.count * 100) : 0;
+      var td = el('td', hl[i] ? 'hl' : '');
+      var bar = el('div', 'bar');
+      var fill = el('span');
+      fill.style.width = pct + '%';
+      bar.appendChild(fill);
+      var num = el('div', 'pct', t.count ? pct + '%' : '—');
+      num.appendChild(el('small', '', t.count + ' 项'));
+      td.appendChild(bar);
+      td.appendChild(num);
+      score.appendChild(td);
+    });
+    body.appendChild(score);
+
+    var legend = document.getElementById('legend');
+    ['yes', 'partial', 'no', 'unknown'].forEach(function (level) { legend.appendChild(chip(level)); });
+    var sources = document.getElementById('sources');
+    sources.textContent = '数据截至 ' + d.asOf + (d.sources && d.sources.length ? ' · 来源：' + d.sources.join('；') : '');
+
+    var foot = d.footer || {};
+    if (foot.text) document.getElementById('footText').textContent = foot.text;
+    var links = [foot.handle, foot.url].filter(Boolean).join('  ·  ');
+    if (links) document.getElementById('footLinks').textContent = links;
+  })();
+</script>
+</body>
+</html>

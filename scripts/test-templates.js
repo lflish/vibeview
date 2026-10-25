@@ -222,6 +222,17 @@ async function scenario(proxy, browserMode) {
   assert.ok((await page(id, cookie)).text.includes('加急费'));
   assert.equal((await api('GET', `/api/me/items/${id}/export.xlsx`)).status, 200);
 
+  // 仓库里的每个示例模板都能发布，并能用它自带的示例数据渲染
+  for (const dirName of fs.readdirSync(path.join(root, 'examples', 'templates'))) {
+    const dir = path.join(root, 'examples', 'templates', dirName);
+    const pkg = Object.fromEntries(fs.readdirSync(dir).map((f) => [f, fs.readFileSync(path.join(dir, f), 'utf8')]));
+    const pushed = await api('PUT', `/api/templates/${dirName}`, { body: { files: pkg } });
+    assert.equal(pushed.status, 200, `${dirName}: ${JSON.stringify(pushed.body)}`);
+    const rendered = await api('POST', `/api/templates/${dirName}/render`, { body: { data: JSON.parse(pkg['example.json']), dry_run: true } });
+    assert.equal(rendered.status, 200, dirName);
+    assert.equal((await api('DELETE', `/api/templates/${dirName}`)).status, 200);
+  }
+
   if (!proxy && !browserMode) await cli(base, temp);
   if (browserMode) await browser(base);
   console.log(`templates (${proxy ? 'render proxy' : 'direct'}): package checks, visibility/global, matching, validation, deterministic escaped render, sandbox flags, versions, export, free layout, admin, delete passed`);
@@ -233,8 +244,12 @@ async function cli(base, temp) {
   await git('init', '-q'); await git('config', 'user.email', 't@example.com'); await git('config', 'user.name', 't');
   fs.writeFileSync(path.join(repo, 'bills', 'acme.json'), JSON.stringify(exampleData()));
   await git('add', '.'); await git('commit', '-qm', 'init');
-  const env = { ...process.env, DVIEW_URL: base, DVIEW_TOKEN: 'owner-token' };
+  // 默认 skill 目录存在时，template push / delete 会自动同步本机的 skill
+  const skills = path.join(temp, 'skills'); fs.mkdirSync(skills);
+  const env = { ...process.env, DVIEW_URL: base, DVIEW_TOKEN: 'owner-token', CLAUDE_SKILLS_DIR: skills };
   const dview = (...args) => execFile('bash', [path.join(root, 'bin/dview'), ...args], { cwd: repo, env });
+  const skillFile = (name, dir = skills) => path.join(dir, `dview-tpl-${name}`, 'SKILL.md');
+  const mark = (name, dir = skills) => JSON.parse(fs.readFileSync(path.join(dir, `dview-tpl-${name}`, '.dview-template.json'), 'utf8'));
 
   let out = await dview('template', 'push', EXAMPLE, '-m', 'CLI 发布');
   assert.match(out.stdout, /已发布模板 vendor-bill v1/);
@@ -286,9 +301,52 @@ async function cli(base, temp) {
   const uploaded = JSON.parse((await dview('upload', 'prd.html', '--template', 'prd-review', '--json')).stdout);
   assert.equal(uploaded.template.name, 'prd-review');
 
+  // ---- 配套 skill ----
+  // push 时已自动生成；内容包含步骤、模板说明、字段和示例
+  let skill = fs.readFileSync(skillFile('vendor-bill'), 'utf8');
+  assert.match(skill, /^---\nname: dview-tpl-vendor-bill\ndescription: ".*账单.*"\n---\n/);
+  assert.match(skill, /dview render vendor-bill --data/); assert.match(skill, /不要自己算金额/);
+  assert.match(skill, /\| `items\[\]\.price` \| number \| 是 \|/); assert.match(skill, /```json\n\{\n  "vendor"/);
+  assert.match(skill, /生成的页面自带：打印、导出 Excel/);
+  assert.deepEqual({ ...mark('vendor-bill'), id: 'x' }, { server: base, id: 'x', name: 'vendor-bill', version: 1, global: false, owner: 'owner', generator: 1 });
+  // 用户自己的 skill、其他服务的 skill 不受影响；当前服务已删除模板的 skill 会被删掉
+  fs.mkdirSync(path.join(skills, 'dview-tpl-mine')); fs.writeFileSync(path.join(skills, 'dview-tpl-mine', 'SKILL.md'), 'mine');
+  fs.mkdirSync(path.join(skills, 'dview-tpl-elsewhere'));
+  fs.writeFileSync(path.join(skills, 'dview-tpl-elsewhere', '.dview-template.json'), JSON.stringify({ server: 'https://other.example', id: 'zzzz', name: 'elsewhere', version: 1, generator: 1 }));
+  fs.mkdirSync(path.join(skills, 'dview-tpl-gone'));
+  fs.writeFileSync(path.join(skills, 'dview-tpl-gone', '.dview-template.json'), JSON.stringify({ server: base, id: 'gone0000gone0000', name: 'gone', version: 1, generator: 1 }));
+  out = await dview('template', 'skills', 'sync');
+  assert.match(out.stdout, /不变 +dview-tpl-vendor-bill +v1/);
+  assert.match(out.stdout, /新增 +dview-tpl-prd-review/, 'free-layout template from the API scenario');
+  assert.match(out.stdout, /删除 +dview-tpl-gone/);
+  assert.ok(fs.existsSync(path.join(skills, 'dview-tpl-mine', 'SKILL.md')) && fs.existsSync(path.join(skills, 'dview-tpl-elsewhere')));
+  assert.match(fs.readFileSync(skillFile('prd-review'), 'utf8'), /dview upload <文件> --json --template prd-review/);
+  // 新版本：push 自动更新
+  out = await dview('template', 'push', EXAMPLE, '-m', '第二版');
+  assert.match(out.stderr, /更新 +dview-tpl-vendor-bill +v2/);
+  assert.equal(mark('vendor-bill').version, 2);
+  // 全局模板：其他账户默认不同步，--global 才同步，之后一直保持同步
+  await dview('template', 'push', EXAMPLE, '--global');
+  const other = path.join(temp, 'other-skills');
+  const otherEnv = { ...env, DVIEW_TOKEN: 'other-token', CLAUDE_SKILLS_DIR: other };
+  const asOther = (...args) => execFile('bash', [path.join(root, 'bin/dview'), ...args], { cwd: repo, env: otherEnv });
+  await asOther('template', 'skills', 'sync');
+  assert.ok(!fs.existsSync(skillFile('vendor-bill', other)), 'global templates need --global');
+  out = await asOther('template', 'skills', 'sync', '--global');
+  assert.match(out.stdout, /新增 +dview-tpl-vendor-bill/);
+  assert.match(fs.readFileSync(skillFile('vendor-bill', other), 'utf8'), /全局模板，作者是账户 owner/);
+  out = await asOther('template', 'skills', 'sync');
+  assert.match(out.stdout, /不变 +dview-tpl-vendor-bill/, 'once synced, global skills stay');
+  out = await asOther('template', 'skills', 'sync', '--only', 'missing-one');
+  assert.match(out.stdout, /未找到 +missing-one/);
+
   out = await dview('template', 'delete', 'vendor-bill');
   assert.match(out.stdout, /已删除模板 vendor-bill/);
-  console.log('templates CLI: push/list/match/show, validation errors, render with .dview.json, --out, data errors, pull, upload --template, delete passed');
+  assert.match(out.stderr, /已删除本机的 skill dview-tpl-vendor-bill/);
+  assert.ok(!fs.existsSync(path.join(skills, 'dview-tpl-vendor-bill')));
+  out = await asOther('template', 'skills', 'sync');
+  assert.match(out.stdout, /删除 +dview-tpl-vendor-bill/, 'deleted template removed on next sync');
+  console.log('templates CLI: push/list/match/show, validation errors, render with .dview.json, --out, data errors, pull, upload --template, skills sync (auto, update, unmanaged, other server, global, removal), delete passed');
 }
 
 // 浏览器：受保护页面里模板脚本正常显示数据；导出 Excel 的文件和接口一致；打印时工具栏隐藏；注入的脚本不执行

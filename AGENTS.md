@@ -66,7 +66,9 @@ Page templates fix the layout of recurring pages (bills, reports). Before genera
 and follow its guide: for a fixed layout write only the data as JSON and run
 `dview render <name> --data <file.json> --json` (do not write HTML or compute totals); for a free layout
 generate the HTML and upload it with `--template <name>`. Ask the user when several templates match.
-Details: `skill/dview-upload/SKILL.md`, `docs/specs/page-templates.md`.
+If a `dview-tpl-<name>` skill triggers, follow it directly; `dview template skills sync` generates these
+skills from the server's templates. Details: `skill/dview-upload/SKILL.md`, `docs/specs/page-templates.md`,
+`docs/specs/template-skills.md`.
 
 Choose a mode before generating a page. Use a **single self-contained HTML file** by default.
 Use a **multi-page site** only when the work needs two or more pages that link to each other, separate

@@ -31,6 +31,7 @@ vibeview CLI — 上传并管理本账户预览资源（dview 与 vibeview 两�
   dview template pull <name> [dir]  下载模板到本地修改
   dview template delete <name>    删除自己的模板
   dview render <name> --data <file.json>  用模板和数据生成页面并上传
+  dview template skills sync      为模板生成本机的配套 skill（dview-tpl-*），供 agent 直接触发
   dview list              列出本账户资源（可用分类选项筛选）
   dview edit <id>         修改本账户资源的分类、标签、项目、agent 或描述
   dview delete <id>       删除本账户下的一条资源
@@ -54,7 +55,11 @@ vibeview CLI — 上传并管理本账户预览资源（dview 与 vibeview 两�
   --data FILE             render 的数据文件（JSON）；.dview.json 以它的路径为键
   --out FILE              render 只生成页面保存到本地，不上传
   --template NAME         upload 时使用自由排版的模板（记录模板，带上它的分类）
-  --global                template push 时发布为全局模板（需要账户权限）
+  --global                template push 时发布为全局模板（需要账户权限）；
+                          skills sync 时同时同步全局模板
+  --only NAME             skills sync 只同步指定模板（可重复或逗号分隔）
+  --dir DIR               skills sync 写入的目录（默认 $CLAUDE_SKILLS_DIR 或 ~/.claude/skills）
+  --no-skill              template push / delete 后不自动同步本机 skill
   -h, --help              显示帮助
 
 分类选项（upload / edit 写入，list 用于筛选）:
@@ -167,6 +172,9 @@ DATA_FILE=""
 OUT_FILE=""
 TEMPLATE=""
 GLOBAL=""
+ONLY=""
+SKILLS_DIR_OPT=""
+NO_SKILL=0
 # 分类字段：L_<name> 为值，S_<name>=1 表示命令行显式给出（bash 3.2 无关联数组）
 L_category="" L_agent="" L_model="" L_project="" L_description=""
 S_category=0 S_agent=0 S_model=0 S_project=0 S_description=0
@@ -241,6 +249,20 @@ while [ "$#" -gt 0 ]; do
       ;;
     --global)
       GLOBAL=1
+      shift
+      ;;
+    --only)
+      [ "$#" -ge 2 ] || { err "--only 需要参数"; exit 1; }
+      ONLY="${ONLY:+$ONLY,}$2"
+      shift 2
+      ;;
+    --dir)
+      [ "$#" -ge 2 ] || { err "--dir 需要参数"; exit 1; }
+      SKILLS_DIR_OPT="$2"
+      shift 2
+      ;;
+    --no-skill)
+      NO_SKILL=1
       shift
       ;;
     upload|list|edit|delete|versions|template|render|me|whoami)
@@ -698,6 +720,7 @@ console.log(manifest.name || "");
   check_template_name "$name"
   http PUT "${BASE}/api/templates/${name}" -H 'Content-Type: application/json' --data-binary "@${body}"
   [ "$HTTP_CODE" = "200" ] || { show_api_error "发布模板"; exit 1; }
+  auto_sync_skill sync "$name"
   if [ "$UPLOAD_JSON" = "1" ]; then printf '%s\n' "$BODY"; return; fi
   printf '已发布模板 %s v%s%s\n' "$name" "$(json_field version "$BODY" || true)" "$( [ "$(json_field global "$BODY" || true)" = "True" ] || [ "$(json_field global "$BODY" || true)" = "true" ] && printf '（全局）')"
 }
@@ -737,6 +760,166 @@ template_delete() {
   http DELETE "${BASE}/api/templates/${name}"
   [ "$HTTP_CODE" = "200" ] || { show_api_error "删除模板"; exit 1; }
   printf '已删除模板 %s（已生成的页面不受影响）\n' "$name"
+  auto_sync_skill remove "$name"
+}
+
+# ---- 模板配套 skill：根据服务端的模板生成本机的 dview-tpl-* skill ----
+# 只处理带 .dview-template.json 标记、且属于当前服务的目录；用户自己的 skill 不碰。
+default_skills_dir() { printf '%s' "${CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"; }
+
+read -r -d '' SKILLS_JS <<'JS' || true
+const fs = require('fs');
+const path = require('path');
+const [mode, dir, only, includeGlobal] = process.argv.slice(1);
+const base = process.env.DVIEW_SYNC_BASE;
+const token = process.env.DVIEW_SYNC_TOKEN;
+const GENERATOR = 1;
+const MARK = '.dview-template.json';
+const NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
+const skillName = (name) => ('dview-tpl-' + name).slice(0, 64).replace(/-+$/, '');
+
+async function api(p) {
+  const response = await fetch(base + p, { headers: { Authorization: 'Bearer ' + token } });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(`${p}: HTTP ${response.status} ${body.error || ''}`);
+  return body;
+}
+function readMark(target) {
+  try { return JSON.parse(fs.readFileSync(path.join(target, MARK), 'utf8')); } catch { return null; }
+}
+function managed() {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).filter((n) => n.startsWith('dview-tpl-'))
+    .map((n) => ({ name: n, dir: path.join(dir, n), mark: readMark(path.join(dir, n)) }))
+    .filter((x) => x.mark && x.mark.server === base);
+}
+const line = (s) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+const cell = (s) => line(s).replace(/\|/g, '\\|');
+
+function skillMarkdown(t) {
+  const name = skillName(t.name);
+  const keywords = (t.match || []).join('、');
+  let description = `${line(t.title)}：${line(t.description)}。用户提到 ${keywords} 时，用 vibeview 模板 ${t.name} 生成页面。`;
+  if (description.length > 1024) description = description.slice(0, 1021) + '…';
+  const source = t.global && !t.mine ? `全局模板，作者是账户 ${t.owner}` : '本账户的模板';
+  const features = { print: '打印', export: '导出 Excel' };
+  const extras = (t.features || []).map((f) => features[f] || f);
+  const out = [];
+  out.push('---', `name: ${name}`, `description: ${JSON.stringify(description)}`, '---', '');
+  out.push(`# ${line(t.title)}（vibeview 模板 \`${t.name}\`）`, '');
+  out.push(`> 由 \`dview template skills sync\` 根据模板第 ${t.version} 版生成（${source}）。不要手改；模板更新后重新同步。`, '');
+  out.push(line(t.description) + (extras.length ? `生成的页面自带：${extras.join('、')}。` : ''), '');
+  out.push('## 步骤', '');
+  out.push(`1. 运行 \`dview template show ${t.name} --json\` 确认字段，以返回的内容为准。返回的 \`version\` 大于 ${t.version} 时，提醒用户运行 \`dview template skills sync\`。`);
+  if (t.layout) {
+    out.push('2. **只整理数据**：不要自己写 HTML，也不要自己算金额、合计这类可以由模板算出的值。数据写成 JSON 文件，放在仓库里固定的位置，以后改数据重新渲染会更新原链接。');
+    out.push(`3. 运行 \`dview render ${t.name} --data <数据文件> --json -m "<这次改了什么>"\`。数据不合格时会逐条列出字段，修正后重试。只有用户明确要求免验证码时才加 \`--public\`。`);
+  } else {
+    out.push('2. 按下面的模板说明生成 HTML（没有特别要求时用浅色风格），放在仓库里固定的位置，以后修改后重新上传会更新原链接。');
+    out.push(`3. 运行 \`dview upload <文件> --json --template ${t.name} -m "<这次改了什么>"\`。只有用户明确要求免验证码时才加 \`--public\`。`);
+  }
+  out.push('4. 从返回的 JSON 读取 `url`、`accessCode`、`access.expiresAt` 告诉用户，链接和访问码分开发送。`updated: true` 表示更新了原链接，访问码不变。', '');
+  out.push('## 模板说明', '', `以下内容来自模板作者（${source}）。`, '');
+  out.push(String(t.guide || '').trim() || '（模板没有附带说明）', '');
+  if ((t.fields || []).length) {
+    out.push('## 字段', '', '| 字段 | 类型 | 必填 | 说明 |', '| --- | --- | --- | --- |');
+    for (const f of t.fields) {
+      const note = [f.title, f.description, f.enum ? '可选值 ' + f.enum.map((v) => JSON.stringify(v)).join(' / ') : ''].filter(Boolean).join('，');
+      out.push(`| \`${cell(f.path)}\` | ${cell(f.type)} | ${f.required ? '是' : ''} | ${cell(note)} |`);
+    }
+    out.push('');
+  }
+  if (t.example != null) out.push('## 示例数据', '', '```json', JSON.stringify(t.example, null, 2), '```', '');
+  return out.join('\n');
+}
+
+function write(target, t) {
+  const staging = target + '.tmp-' + process.pid;
+  fs.rmSync(staging, { recursive: true, force: true });
+  fs.mkdirSync(staging, { recursive: true });
+  fs.writeFileSync(path.join(staging, 'SKILL.md'), skillMarkdown(t));
+  const mark = { server: base, id: t.id, name: t.name, version: t.version, global: !!t.global, owner: t.owner, generator: GENERATOR };
+  fs.writeFileSync(path.join(staging, MARK), JSON.stringify(mark, null, 2) + '\n');
+  fs.rmSync(target, { recursive: true, force: true });
+  fs.renameSync(staging, target);
+}
+
+async function sync() {
+  const list = (await api('/api/templates')).templates || [];
+  const onlySet = only ? new Set(only.split(',').map((s) => s.trim()).filter(Boolean)) : null;
+  const installed = new Map(managed().map((m) => [m.mark.id, m]));
+  const own = new Set(list.filter((t) => t.mine).map((t) => t.name));
+  // 自己的模板；全局模板只在 --global、--only 指定或之前已经同步过时才处理。同名时自己的优先。
+  let selected = list.filter((t) => NAME_RE.test(t.name) && (t.mine
+    || (!own.has(t.name) && (includeGlobal === '1' || (onlySet && onlySet.has(t.name)) || installed.has(t.id)))));
+  if (onlySet) {
+    selected = selected.filter((t) => onlySet.has(t.name));
+    for (const name of onlySet) if (!selected.some((t) => t.name === name)) console.log(`未找到  ${name}（不是你的模板，也不是全局模板）`);
+  }
+  fs.mkdirSync(dir, { recursive: true });
+  const keep = new Set();
+  for (const t of selected) {
+    const target = path.join(dir, skillName(t.name));
+    keep.add(path.basename(target));
+    const mark = readMark(target);
+    if (fs.existsSync(target) && !mark) { console.log(`跳过    ${path.basename(target)}（已有同名目录，不是 dview 生成的）`); continue; }
+    if (mark && mark.server !== base) { console.log(`跳过    ${path.basename(target)}（属于另一个服务 ${mark.server}）`); continue; }
+    if (mark && mark.id === t.id && mark.version === t.version && mark.generator === GENERATOR) { console.log(`不变    ${path.basename(target)}  v${t.version}`); continue; }
+    const detail = await api('/api/templates/' + t.name);
+    write(target, { ...detail, mine: t.mine });
+    console.log(`${mark ? '更新' : '新增'}    ${path.basename(target)}  v${t.version}`);
+  }
+  if (!onlySet) {
+    for (const m of managed()) {
+      if (keep.has(m.name)) continue;
+      fs.rmSync(m.dir, { recursive: true, force: true });
+      console.log(`删除    ${m.name}（模板已删除或不再可用）`);
+    }
+  }
+  console.log(`skill 目录：${dir}`);
+}
+
+function remove() {
+  const target = path.join(dir, skillName(only));
+  const mark = readMark(target);
+  if (mark && mark.server === base && mark.name === only) {
+    fs.rmSync(target, { recursive: true, force: true });
+    console.log(`已删除本机的 skill ${path.basename(target)}`);
+  }
+}
+
+(mode === 'remove' ? Promise.resolve(remove()) : sync()).catch((error) => { console.error('同步模板 skill 失败：' + error.message); process.exit(1); });
+JS
+
+run_skills() {
+  command -v node >/dev/null 2>&1 || { err "同步模板 skill 需要 node"; return 1; }
+  DVIEW_SYNC_BASE="$BASE" DVIEW_SYNC_TOKEN="$TOKEN" node -e "$SKILLS_JS" "$@"
+}
+
+template_skills() {
+  case "${ARGS[1]:-}" in
+    sync)
+      if [ -n "$ONLY" ]; then
+        local name
+        for name in ${ONLY//,/ }; do check_template_name "$name"; done
+      fi
+      run_skills sync "${SKILLS_DIR_OPT:-$(default_skills_dir)}" "$ONLY" "${GLOBAL:-0}" ;;
+    *) err "用法: dview template skills sync [--global] [--only NAME] [--dir DIR]"; exit 1 ;;
+  esac
+}
+
+# 发布或删除模板后同步本机（默认 skill 目录存在时；失败不影响发布结果）
+auto_sync_skill() {
+  local action="$1" name="$2" dir
+  [ "$NO_SKILL" = "1" ] && return 0
+  dir="$(default_skills_dir)"
+  [ -d "$dir" ] || return 0
+  command -v node >/dev/null 2>&1 || return 0
+  if [ "$action" = "remove" ]; then
+    run_skills remove "$dir" "$name" >&2 || true
+  else
+    run_skills sync "$dir" "$name" 0 >&2 || err "本机 skill 未同步，可稍后运行 dview template skills sync"
+  fi
 }
 
 cmd_template() {
@@ -748,7 +931,8 @@ cmd_template() {
     push) template_push ;;
     pull) template_pull ;;
     delete|rm) template_delete ;;
-    *) err "用法: dview template list | match \"<需求>\" | show <name> | push <dir> | pull <name> [dir] | delete <name>"; exit 1 ;;
+    skills) template_skills ;;
+    *) err "用法: dview template list | match \"<需求>\" | show <name> | push <dir> | pull <name> [dir] | delete <name> | skills sync"; exit 1 ;;
   esac
 }
 
