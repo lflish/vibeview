@@ -1,0 +1,13 @@
+{
+  "name": "aibot-compare",
+  "title": "AI Bot 多角度对比",
+  "description": "从能力、集成、部署、成本等多个角度横向对比几个 AI 机器人，生成适合发推特的对比图（1200px 卡片，可选深色）",
+  "match": ["横向对比", "竞品对比", "功能对比", "bot 对比", "机器人对比", "aibot", "ai bot", "comparison", "compare"],
+  "category": "report",
+  "tags": ["comparison", "aibot"],
+  "layout": "layout.html",
+  "schema": "schema.json",
+  "example": "example.json",
+  "guide": "guide.md",
+  "pageTitle": "{title}"
+}

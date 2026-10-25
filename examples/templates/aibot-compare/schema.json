@@ -1,0 +1,71 @@
+{
+  "type": "object",
+  "required": ["title", "asOf", "bots", "dimensions"],
+  "properties": {
+    "title": { "type": "string", "title": "标题", "minLength": 1, "maxLength": 60 },
+    "subtitle": { "type": "string", "title": "副标题", "description": "一句话说明对比的范围或结论", "maxLength": 140 },
+    "asOf": { "type": "string", "title": "数据日期", "description": "如 2026-10；对比真实产品时必填", "minLength": 1, "maxLength": 20 },
+    "theme": { "type": "string", "title": "主题", "description": "dark 在 X / 推特上更醒目", "enum": ["light", "dark"] },
+    "highlight": { "type": "string", "title": "突出显示的 bot", "description": "填 bots 里某一项的 id，通常是你自己的项目", "maxLength": 40 },
+    "bots": {
+      "type": "array",
+      "title": "参与对比的 bot（按列从左到右）",
+      "minItems": 2,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "type": "string", "title": "标识", "description": "小写英文，供 highlight 引用", "minLength": 1, "maxLength": 40 },
+          "name": { "type": "string", "title": "名称", "minLength": 1, "maxLength": 40 },
+          "vendor": { "type": "string", "title": "厂商 / 作者", "maxLength": 40 },
+          "tagline": { "type": "string", "title": "一句话定位", "maxLength": 60 }
+        }
+      }
+    },
+    "dimensions": {
+      "type": "array",
+      "title": "对比角度（按行从上到下）",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "required": ["name", "values"],
+        "properties": {
+          "group": { "type": "string", "title": "分组", "description": "相邻的同名分组合并显示，如 能力 / 集成 / 部署 / 成本", "maxLength": 30 },
+          "name": { "type": "string", "title": "角度", "minLength": 1, "maxLength": 40 },
+          "note": { "type": "string", "title": "角度说明", "maxLength": 120 },
+          "values": {
+            "type": "array",
+            "title": "每个 bot 的情况，顺序和 bots 一致",
+            "minItems": 1,
+            "maxItems": 6,
+            "items": {
+              "type": "object",
+              "required": ["level"],
+              "properties": {
+                "level": { "type": "string", "title": "支持程度", "enum": ["yes", "partial", "no", "unknown"] },
+                "text": { "type": "string", "title": "短说明", "description": "12 个字以内最好，如 \"GPT-5 / Claude\"", "maxLength": 60 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "title": "数据来源",
+      "maxItems": 10,
+      "items": { "type": "string", "maxLength": 200 }
+    },
+    "footer": {
+      "type": "object",
+      "title": "页脚",
+      "properties": {
+        "text": { "type": "string", "title": "页脚文字", "description": "如 项目名 · 一句话介绍", "maxLength": 80 },
+        "handle": { "type": "string", "title": "推特账号", "description": "如 @yourname", "maxLength": 40 },
+        "url": { "type": "string", "title": "链接", "description": "如 github.com/you/project", "maxLength": 120 }
+      }
+    }
+  }
+}

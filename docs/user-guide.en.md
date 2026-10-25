@@ -161,7 +161,7 @@ dview template pull vendor-bill ./my-bill             # Download to edit
 dview template list / delete <name>
 ```
 
-`examples/templates/vendor-bill/` is a complete example to copy and adapt. A template directory contains:
+`examples/templates/` holds two complete examples to copy and adapt: `vendor-bill` (a monthly bill with printing and Excel export) and `aibot-compare` (an AI bot comparison from several angles, a 1200px-wide card with an optional dark theme, ready to screenshot for X). A template directory contains:
 
 | File | Purpose |
 | --- | --- |
@@ -179,6 +179,7 @@ A template without `layout` is a **free-layout** template: the agent generates t
 - **Versions**: each `push` adds a template version; the latest 50 are kept, and each account can have up to 100 templates. Rendered pages do not change with the template and still open and export after it is deleted; rendering again uses the latest version.
 - **Global templates**: a template is private to the account that published it. Accounts with `global_templates: true` in `config.yaml` can publish to everyone with `dview template push <dir> --global`; administrators can toggle it with `PATCH /admin/api/templates/:id`. Lookups by name prefer your own template over a global one with the same name.
 - **Matching**: a template matches when any of its keywords appears in the request (ignoring case and full-width forms), ranked by how many keywords match.
+- **Companion skills**: `dview template skills sync` generates a local Claude Code skill for each template (`~/.claude/skills/dview-tpl-<name>/`) holding its steps, guide, fields, and example, so agents trigger it directly from a related request instead of matching keywords first. By default only your own templates are synced; `--global` adds global templates (whose guides are written by other accounts), `--only <name>` syncs one template, and `--dir` writes to another agent's skill directory. `dview template push` / `delete` sync this machine automatically, and `install-skill.sh` syncs once after installing; run `sync` again when a template changes elsewhere. Generated directories carry a `.dview-template.json` marker, and syncing touches only those, never your own skills.
 
 ### Categories, projects, and tags
 
