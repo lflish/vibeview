@@ -214,6 +214,56 @@ async function scenario(proxy, browserMode) {
   assert.equal((await api('GET', '/api/templates/vendor-bill', { token: 'other-token' })).status, 404, 'no longer global');
   assert.equal((await patch(vb.id, true)).status, 200);
   assert.ok((await request(`${base}/admin/api/item/${id}/export.xlsx`, { headers: { cookie: admin } })).ok);
+  const freeId = result.body.id;
+
+  // ---- 模板管理页：使用情况、测试触发、详情、沙箱预览、按模板筛选 ----
+  const adminGet = async (url, cookieHeader = admin) => {
+    const r = await request(base + url, { headers: cookieHeader ? { cookie: cookieHeader } : {} });
+    const type = r.headers.get('content-type') || '';
+    return { status: r.status, headers: r.headers, body: type.includes('json') ? await r.json() : await r.text() };
+  };
+  const metas = () => fs.readdirSync(path.join(data, 'meta')).filter((f) => f.endsWith('.json')).map((f) => readMeta(f.slice(0, -5)));
+  const usedBy = (tid) => metas().filter((m) => m.template && m.template.id === tid);
+  const listedAll = (await adminGet('/admin/api/templates')).body.templates;
+  const vbListed = listedAll.find((t) => t.id === vb.id);
+  assert.ok(vbListed.pages >= 1); assert.equal(vbListed.pages, usedBy(vb.id).length);
+  assert.equal(vbListed.lastUsedAt, usedBy(vb.id).map((m) => m.updatedAt || m.createdAt).sort().at(-1));
+  assert.equal(vbListed.versionCount, JSON.parse(fs.readFileSync(path.join(data, 'templates', vb.id, 'meta.json'), 'utf8')).versions.length);
+  for (const account of [['owner', 'owner-token'], ['other', 'other-token']]) {
+    for (const q of [manifest.match[0] + ' 10 月', '需求原型', '没有关系的一句话']) {
+      const viaAdmin = await adminGet('/admin/api/templates/match?' + new URLSearchParams({ account: account[0], q }));
+      const viaApi = await api('GET', '/api/templates/match?' + new URLSearchParams({ q }), { token: account[1] });
+      assert.equal(viaAdmin.status, 200);
+      assert.deepEqual(viaAdmin.body.templates.map((t) => t.id), viaApi.body.templates.map((t) => t.id), `match for ${account[0]}: ${q}`);
+    }
+  }
+  assert.equal((await adminGet('/admin/api/templates/match?account=nobody&q=x')).status, 404);
+  assert.equal((await adminGet('/admin/api/templates/match?account=owner&q=x', null)).status, 401);
+  const detailed = await adminGet(`/admin/api/templates/${vb.id}`);
+  assert.equal(detailed.status, 200); assert.equal(detailed.body.pages, vbListed.pages);
+  assert.ok(detailed.body.fields.length && detailed.body.example && detailed.body.guide && detailed.body.versions.length);
+  assert.equal((await adminGet('/admin/api/templates/0000000000000000')).status, 404);
+  const preview = await adminGet(`/admin/api/templates/${vb.id}/preview`);
+  assert.equal(preview.status, 200);
+  assert.match(preview.headers.get('content-security-policy'), /^sandbox allow-scripts;/);
+  assert.doesNotMatch(preview.headers.get('content-security-policy'), /allow-same-origin/);
+  assert.equal(preview.headers.get('x-frame-options'), 'SAMEORIGIN');
+  assert.ok(preview.body.includes('id="dview-data"'));
+  assert.equal((await adminGet(`/admin/api/templates/${vb.id}/preview`, null)).status, 401);
+  const freeTpl = listedAll.find((t) => t.name === 'prd-review');
+  assert.equal((await adminGet(`/admin/api/templates/${freeTpl.id}/preview`)).status, 404, 'free layout has no preview');
+  const filtered = (await adminGet(`/admin/api/list?pageSize=100&template=${vb.id}`)).body;
+  assert.equal(filtered.total, vbListed.pages);
+  assert.ok(filtered.items.every((it) => it.template && it.template.id === vb.id && it.template.name === 'vendor-bill'));
+  assert.equal(filtered.items.find((it) => it.id === id).exportable, true);
+  const everything = (await adminGet('/admin/api/list?pageSize=100')).body.items;
+  assert.equal(everything.find((it) => it.id === freeId).exportable, false);
+  assert.equal(everything.find((it) => it.id === freeId).template.name, 'prd-review');
+  assert.ok(everything.some((it) => !it.template), 'plain uploads carry no template');
+  assert.equal((await adminGet('/admin/api/list?pageSize=100&template=bad')).body.total, everything.length, 'bad template filter is ignored');
+  const accountsInfo = (await adminGet('/admin/api/accounts')).body.accounts;
+  assert.equal(accountsInfo.find((a) => a.name === 'owner').globalTemplates, true);
+  assert.equal(accountsInfo.find((a) => a.name === 'other').globalTemplates, false);
 
   // ---- 删除模板：已生成的页面仍可打开和导出 ----
   assert.equal((await api('DELETE', '/api/templates/vendor-bill', { token: 'other-token' })).status, 404, 'only own templates');
@@ -391,8 +441,57 @@ async function browser(base) {
     await Promise.all([mobile.waitForURL(`${base}/v/${created.id}`), mobile.click('button')]);
     await mobile.waitForSelector('#rows tr');
     assert.ok(await mobile.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'no horizontal page scroll on phones');
+    await adminTemplates(instance, base, created.id, expected);
     console.log('templates browser: protected render, escaped notes, xlsx download equals API export, print button, print media hides toolbar, mobile width passed');
   } finally { await instance.close(); }
+}
+
+// 管理端模板页：卡片、测试触发、沙箱预览、按模板筛选、导出 Excel、手机宽度
+async function adminTemplates(instance, base, pageId, expectedXlsx) {
+  const context = await instance.newContext({ acceptDownloads: true, viewport: { width: 1280, height: 900 } });
+  const tab = await context.newPage();
+  const errors = []; tab.on('pageerror', (e) => errors.push(e.message));
+  await tab.goto(`${base}/admin/login`);
+  await tab.locator('input[name=user]').fill('test');
+  await tab.locator('input[name=password]').fill('test-password');
+  await tab.locator('button[type=submit]').click();
+  await tab.waitForSelector('#rows tr');
+  await tab.goto(`${base}/admin#templates`);
+  await tab.waitForSelector('#tpl-grid .tpl-card');
+  const card = tab.locator('.tpl-card', { hasText: 'vendor-bill' });
+  assert.match(await card.textContent(), /生成 1 个页面/);
+  assert.match(await card.textContent(), /打印 · 导出 Excel/);
+  await tab.selectOption('#tpl-try-account', 'owner');
+  await tab.fill('#tpl-try-q', '给 ACME 出 10 月账单');
+  await tab.click('#tpl-try button[type=submit]');
+  await tab.waitForSelector('.tpl-verdict');
+  assert.match(await tab.textContent('.tpl-verdict'), /会使用模板 vendor-bill/);
+  await card.locator('button', { hasText: '详情与预览' }).click();
+  await tab.waitForSelector('.tpl-preview');
+  const frame = tab.frameLocator('.tpl-preview');
+  await frame.locator('#rows tr').first().waitFor();
+  const inner = tab.frames().find((f) => f.url().endsWith('/preview'));
+  assert.equal(await inner.evaluate(() => { try { return document.cookie; } catch { return 'blocked'; } }), 'blocked', 'preview cannot read admin cookies');
+  assert.equal(await inner.evaluate(() => fetch('/admin/api/templates', { credentials: 'include' }).then((r) => r.status, () => 'blocked')), 'blocked', 'preview cannot call admin APIs');
+  assert.ok(await tab.locator('.tpl-fields li').count() > 3);
+  await tab.click('#tpl-close');
+  await card.locator('button', { hasText: '查看页面' }).click();
+  await tab.waitForSelector('#rows tr .template-badge');
+  assert.equal(await tab.locator('#rows tr').count(), 1);
+  assert.match(await tab.inputValue('#template-filter'), /^[0-9A-Za-z]{16}$/);
+  await tab.locator('#rows tr .btn-more').first().click();
+  const [download] = await Promise.all([tab.waitForEvent('download'), tab.click('.row-menu button:has-text("导出 Excel")')]);
+  assert.ok(fs.readFileSync(await download.path()).equals(expectedXlsx), 'admin export equals API export');
+  await tab.click('#btn-clear-filters');
+  await tab.waitForSelector('#rows tr');
+  assert.equal(await tab.inputValue('#template-filter'), '');
+  assert.deepEqual(errors, []);
+  const phone = await (await instance.newContext({ viewport: { width: 390, height: 800 }, storageState: await context.storageState() })).newPage();
+  await phone.goto(`${base}/admin#templates`);
+  await phone.waitForSelector('#tpl-grid .tpl-card');
+  assert.ok(await phone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'templates page fits phones');
+  console.log('admin templates browser: cards, test trigger, sandboxed preview, filter by template, export, phone width passed (page ' + pageId + ')');
+  await context.close();
 }
 
 (async () => {

@@ -177,9 +177,10 @@ dview template list / delete <name>
 - **生成的页面**是普通的 HTML 资源：同样有访问码，可以用 `--id` 或 `.dview.json` 更新同一个链接。`render` 的 `.dview.json` 以**数据文件**的路径为键。
 - **功能**：`"print": true` 在页面右上角（手机上在右下角）加"打印"按钮；`"export": {"xlsx": {...}}` 加"导出 Excel"按钮，在浏览器里用页面数据生成 `.xlsx`，列可以是字段，也可以是几个字段相乘（如金额 = 数量 × 单价），并可加合计行。打印时按钮自动隐藏。只有开了这些功能的页面，沙箱才额外允许打印弹窗和下载。agent 和脚本可以用 `GET /api/me/items/:id/export.xlsx` 得到同样的文件。
 - **版本**：每次 `push` 生成模板的新版本，保留最近 50 个；每个账户最多 100 个模板。已生成的页面不随模板改动，删除模板后也照常打开和导出；再次渲染时使用模板的最新版本。
-- **全局模板**：模板默认只有发布它的账户能用。在 `config.yaml` 里给账户加上 `global_templates: true` 后，可以用 `dview template push <dir> --global` 发布给所有账户；管理员也可以用 `PATCH /admin/api/templates/:id` 切换。按名称查找时，自己的模板优先于同名的全局模板。
+- **全局模板**：模板默认只有发布它的账户能用。在 `config.yaml` 里给账户加上 `global_templates: true` 后，可以用 `dview template push <dir> --global` 发布给所有账户；管理员也可以在管理端的「模板」页切换。按名称查找时，自己的模板优先于同名的全局模板。
 - **匹配**：用户原话里出现模板的任一关键词即命中（不区分大小写和全角半角），按命中的关键词数量排序。
 - **配套 skill**：`dview template skills sync` 为模板生成本机的 Claude Code skill（`~/.claude/skills/dview-tpl-<模板名>/`），内容是模板的步骤、说明、字段和示例。agent 听到相关的请求会直接触发它，不用先查关键词。默认只同步自己的模板，`--global` 同时同步全局模板（它们的说明由别的账户编写），`--only <名称>` 只同步指定模板，`--dir` 写到其他 agent 的 skill 目录。`dview template push` / `delete` 会自动同步本机，`install-skill.sh` 安装后也会同步一次；模板在别处更新后，再运行一次 `sync`。生成的目录带有 `.dview-template.json` 标记，同步只处理这些目录，不会动你自己的 skill。
+- **管理端「模板」页**：列出所有账户的模板，显示触发关键词、功能、版本、生成过的页面数和最近使用时间；「测试触发」选一个账户、输入一句话，结果和该账户运行 `dview template match` 相同；详情里用示例数据预览模板（在沙箱里运行），并可以设为全局或取消。资源管理里，模板生成的页面带模板标记，可以按模板筛选，能导出的页面在「⋯」菜单里有「导出 Excel」。
 
 ### 分类、项目与标签
 

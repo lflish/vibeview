@@ -13,6 +13,8 @@
   let typeFilter = '';
   let sourceFilter = '';
   let visitFilter = '';
+  let templateFilter = '';
+  let templateList = [];
   let visitsAvailable = true;
   let visitsSince = '';
   let query = '';
@@ -136,7 +138,7 @@
 
   // 有值的筛选框高亮，并在有任何筛选时显示「清除筛选」。
   function hasActiveFilter() {
-    return !!(typeFilter || sourceFilter || visitFilter || query.trim() || Object.values(facetFilters).some(Boolean));
+    return !!(typeFilter || sourceFilter || visitFilter || templateFilter || query.trim() || Object.values(facetFilters).some(Boolean));
   }
   function syncFilterUi() {
     document.querySelectorAll('.filter-row select').forEach((select) => {
@@ -146,7 +148,7 @@
       chip.setAttribute('aria-pressed', String((chip.dataset.type || '') === typeFilter));
     });
     el.clearFilters.classList.toggle('hidden', !hasActiveFilter());
-    const facetCount = [sourceFilter, visitFilter, ...Object.values(facetFilters)].filter(Boolean).length;
+    const facetCount = [sourceFilter, visitFilter, templateFilter, ...Object.values(facetFilters)].filter(Boolean).length;
     renderProjectNav();
     $('filter-count').textContent = facetCount ? String(facetCount) : '';
   }
@@ -362,6 +364,8 @@
     trash: '<path d="M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
     tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
     open: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+    download: '<path d="M12 4v11m-5-5 5 5 5-5M4 19h16"/>',
+    template: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 9v12"/>',
     hash: '<path d="M5 9h14M5 15h14M10 4 8 20M16 4l-2 16"/>',
     folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
     bot: '<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4M9 13v1m6-1v1"/>',
@@ -441,6 +445,7 @@
       ['settings', '访问设置…', () => openAccess(it)],
       ['tag', '编辑分类…', () => openLabels(it)],
       ['clock', '版本历史…', () => openVersions(it)],
+      ...(it.exportable ? [['download', '导出 Excel', () => exportItem(it)]] : []),
       null,
       ['trash', '删除…', () => openDelete(it), 'danger'],
     ];
@@ -475,6 +480,16 @@
   });
   window.addEventListener('scroll', () => closeMenu(false), true);
   window.addEventListener('resize', () => closeMenu(false));
+
+  // 用链接下载，浏览器带上管理端的登录 cookie
+  function exportItem(it) {
+    const a = document.createElement('a');
+    a.href = '/admin/api/item/' + encodeURIComponent(it.id) + '/export.xlsx';
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
 
   function openDelete(it) {
     pendingDelete = it;
@@ -591,6 +606,16 @@
       ver.setAttribute('aria-label', '第 ' + it.version + ' 版，查看版本历史');
       ver.onclick = () => openVersions(it);
       title.appendChild(ver);
+    }
+    if (it.template && it.template.name) {
+      const tpl = document.createElement('button');
+      tpl.type = 'button';
+      tpl.className = 'template-badge';
+      tpl.textContent = it.template.name;
+      tpl.title = '由模板 ' + it.template.name + ' 第 ' + it.template.version + ' 版生成，点击只看这个模板生成的页面';
+      tpl.setAttribute('aria-label', '模板 ' + it.template.name + '，按这个模板筛选');
+      tpl.onclick = () => filterByTemplate(it.template.id);
+      title.appendChild(tpl);
     }
     const description = document.createElement('span');
     description.className = 'description' + (it.description ? '' : ' empty');
@@ -1115,6 +1140,7 @@
       if (typeFilter) params.set('type', typeFilter);
       if (sourceFilter) params.set('source', sourceFilter);
       if (visitFilter) params.set('visit', visitFilter);
+      if (templateFilter) params.set('template', templateFilter);
       for (const [key, value] of Object.entries(facetFilters)) if (value) params.set(key, value);
       const r = await fetch('/admin/api/list?' + params.toString());
       if (seq !== requestSeq) return;
@@ -1186,6 +1212,45 @@
     page = 1;
     load();
   });
+  $('template-filter').addEventListener('change', () => {
+    templateFilter = $('template-filter').value;
+    page = 1;
+    load();
+  });
+
+  // 模板下拉的选项来自模板列表；筛选中的模板已被删除时保留一个占位选项。
+  function templateLabel(t) {
+    return (t.title || t.name) + (t.title && t.title !== t.name ? ' · ' + t.name : '') + (t.global ? '（全局）' : '（' + t.owner + '）');
+  }
+  function updateTemplateOptions() {
+    const select = $('template-filter');
+    select.replaceChildren(new Option('全部', ''));
+    for (const t of templateList) select.appendChild(new Option(templateLabel(t), t.id));
+    if (templateFilter && !templateList.some((t) => t.id === templateFilter)) select.appendChild(new Option('已删除的模板', templateFilter));
+    select.value = templateFilter;
+    syncFilterUi();
+  }
+  async function loadTemplateList() {
+    const r = await fetch('/admin/api/templates', { cache: 'no-store' });
+    if (r.status === 401) {
+      location.href = '/admin/login';
+      return null;
+    }
+    if (!r.ok) throw new Error('请求失败 (' + r.status + ')');
+    const data = await r.json();
+    templateList = Array.isArray(data.templates) ? data.templates : [];
+    updateTemplateOptions();
+    return templateList;
+  }
+  function filterByTemplate(id) {
+    closeTemplate();
+    showPanel('resources');
+    history.replaceState(null, '', location.pathname);
+    templateFilter = id;
+    updateTemplateOptions();
+    page = 1;
+    load();
+  }
 
   document.querySelectorAll('select.facet').forEach((select) => {
     select.addEventListener('change', () => setFacet(select.dataset.facet, select.value));
@@ -1219,6 +1284,8 @@
     sourceFilter = '';
     visitFilter = '';
     $('visit-filter').value = '';
+    templateFilter = '';
+    $('template-filter').value = '';
     el.q.value = '';
     el.searchWrap.classList.remove('has-value');
     el.sourceFilter.value = '';
@@ -1296,7 +1363,7 @@
     return '<div class="bar ' + cls + '" title="' + p + '%"><i style="width:' + p + '%"></i></div>';
   }
 
-  const PANEL_TITLE = { resources: '资源管理', accounts: '来源与账户' };
+  const PANEL_TITLE = { resources: '资源管理', templates: '模板', accounts: '来源与账户' };
   function showPanel(which) {
     document.querySelectorAll('.tab').forEach((t) => {
       const on = t.dataset.panel === which;
@@ -1306,9 +1373,11 @@
     });
     $('panel-resources').classList.toggle('hidden', which !== 'resources');
     $('panel-accounts').classList.toggle('hidden', which !== 'accounts');
+    $('panel-templates').classList.toggle('hidden', which !== 'templates');
     $('crumb-current').textContent = PANEL_TITLE[which];
     document.title = 'vibeview · ' + PANEL_TITLE[which];
     if (which === 'accounts') loadAccounts(false);
+    if (which === 'templates') loadTemplates();
   }
 
   function filterByAccount(name) {
@@ -1375,6 +1444,7 @@
       const ret = a.retentionDays != null ? a.retentionDays : accountsDefaults.retentionDays;
       lines.push('保留 ' + (ret === 0 ? '不清理' : ret + ' 天') +
         (a.retentionDays != null ? '（账户覆盖）' : '（全局）'));
+      if (a.globalTemplates) lines.push('<span class="badge badge-tpl" title="config.yaml 里设置了 global_templates: true">可发布全局模板</span>');
       meta.innerHTML = lines.join('<br>');
       card.appendChild(meta);
 
@@ -1459,10 +1529,327 @@
     }
   }
 
+  // ---- 模板面板 ----
+  const FEATURE_LABEL = { print: '打印', export: '导出 Excel' };
+  const PREVIEW_WIDTH = 1280;
+  const tplEl = {
+    loading: $('tpl-loading'),
+    error: $('tpl-error'),
+    errorMsg: $('tpl-error-msg'),
+    empty: $('tpl-empty'),
+    grid: $('tpl-grid'),
+  };
+  function showTplOnly(which) {
+    for (const k of ['loading', 'error', 'empty', 'grid']) tplEl[k].classList.toggle('hidden', which !== k);
+  }
+  function featureText(t) {
+    if (!t.layout) return '自由排版';
+    const list = (t.features || []).map((f) => FEATURE_LABEL[f] || f);
+    return list.length ? list.join(' · ') : '固定排版';
+  }
+  function chip(text, cls) {
+    const c = document.createElement('span');
+    c.className = 'label-chip ' + (cls || '');
+    c.textContent = text;
+    return c;
+  }
+  function textEl(tag, cls, text) {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  async function ensureAccounts() {
+    if (accountsLoaded) return;
+    const r = await fetch('/admin/api/accounts');
+    if (!r.ok) return;
+    const data = await r.json();
+    accountsCache = Array.isArray(data.accounts) ? data.accounts : [];
+    accountsDefaults = data.defaults || accountsDefaults;
+    accountsLoaded = true;
+  }
+  function fillTryAccounts() {
+    const select = $('tpl-try-account');
+    const cur = select.value;
+    const names = accountsCache.filter((a) => a.configured).map((a) => a.name);
+    select.replaceChildren(...names.map((n) => new Option(n, n)));
+    if (names.includes(cur)) select.value = cur;
+  }
+
+  async function loadTemplates() {
+    showTplOnly('loading');
+    try {
+      const [list] = await Promise.all([loadTemplateList(), ensureAccounts()]);
+      if (!list) return;
+      fillTryAccounts();
+      renderTemplates();
+    } catch (e) {
+      tplEl.errorMsg.textContent = e.message || '加载失败';
+      showTplOnly('error');
+    }
+  }
+
+  function renderTemplates() {
+    $('tpl-count').textContent = templateList.length ? String(templateList.length) : '';
+    if (!templateList.length) {
+      showTplOnly('empty');
+      return;
+    }
+    const pages = templateList.reduce((n, t) => n + (t.pages || 0), 0);
+    $('tpl-stats').textContent = '固定版式的页面模板。agent 按关键词或配套 skill 选用，只写数据。共 ' +
+      templateList.length + ' 个模板，生成过 ' + pages + ' 个页面。';
+    tplEl.grid.replaceChildren(...templateList.map(templateCard));
+    showTplOnly('grid');
+  }
+
+  function templateCard(t) {
+    const card = textEl('article', 'card tpl-card');
+    const top = textEl('div', 'top');
+    const name = textEl('div', 'name');
+    name.append(textEl('strong', '', t.title || t.name), textEl('code', '', t.name));
+    const scope = textEl('span', 'badge ' + (t.global ? 'badge-ok' : 'badge-orphan'), t.global ? '全局' : t.owner);
+    scope.title = t.global ? '所有账户都能使用；发布者 ' + t.owner : '只有账户 ' + t.owner + ' 能使用';
+    top.append(name, scope);
+    card.appendChild(top);
+    if (t.description) card.appendChild(textEl('p', 'tpl-desc', t.description));
+    const kws = textEl('div', 'labels');
+    kws.setAttribute('aria-label', '触发关键词');
+    for (const word of t.match || []) kws.appendChild(chip(word, 'kw'));
+    if (!(t.match || []).length) kws.appendChild(textEl('span', 'tpl-muted', '没有触发关键词'));
+    card.appendChild(kws);
+    const meta = textEl('div', 'tpl-meta');
+    meta.append(
+      textEl('span', '', featureText(t)),
+      textEl('span', '', 'v' + t.version + (t.versionCount > 1 ? '（保留 ' + t.versionCount + ' 版）' : '')),
+      textEl('span', '', t.pages ? '生成 ' + t.pages + ' 个页面' : '还没有生成页面'),
+    );
+    if (t.lastUsedAt) {
+      const used = textEl('span', '', '最近 ' + fmtAgo(t.lastUsedAt));
+      used.title = fmtTime(t.lastUsedAt);
+      meta.appendChild(used);
+    }
+    card.appendChild(meta);
+    const actions = textEl('div', 'acct-actions');
+    const detail = textEl('button', 'btn btn-sm', '详情与预览');
+    detail.type = 'button';
+    detail.onclick = () => openTemplate(t, detail);
+    actions.appendChild(detail);
+    if (t.pages) {
+      const view = textEl('button', 'btn btn-sm btn-quiet', '查看页面');
+      view.type = 'button';
+      view.onclick = () => filterByTemplate(t.id);
+      actions.appendChild(view);
+    }
+    card.appendChild(actions);
+    return card;
+  }
+
+  $('tpl-try').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const out = $('tpl-try-result');
+    const account = $('tpl-try-account').value;
+    const q = $('tpl-try-q').value.trim();
+    if (!account || !q) {
+      out.replaceChildren(textEl('p', 'tpl-muted', account ? '先输入一句话。' : '还没有配置账户。'));
+      return;
+    }
+    out.replaceChildren(textEl('p', 'tpl-muted', '匹配中…'));
+    try {
+      const r = await fetch('/admin/api/templates/match?' + new URLSearchParams({ account, q }), { cache: 'no-store' });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || '请求失败 (' + r.status + ')');
+      const hits = Array.isArray(data.templates) ? data.templates : [];
+      if (!hits.length) {
+        out.replaceChildren(textEl('p', 'tpl-muted', '没有命中模板，agent 会按普通方式生成页面。'));
+        return;
+      }
+      const head = textEl('p', 'tpl-verdict', hits.length === 1
+        ? '会使用模板 ' + hits[0].name + '。'
+        : '命中 ' + hits.length + ' 个模板，agent 会先问用户用哪个。');
+      const list = textEl('ul', 'tpl-hits');
+      for (const h of hits) {
+        const li = document.createElement('li');
+        const label = textEl('span', 'hit-name');
+        label.append(textEl('strong', '', h.title || h.name), textEl('code', '', h.name),
+          textEl('span', 'tpl-muted', h.mine ? '本账户' : '全局 · ' + h.owner));
+        const words = textEl('span', 'labels');
+        for (const w of h.matched || []) words.appendChild(chip(w, 'kw hit'));
+        li.append(label, words);
+        list.appendChild(li);
+      }
+      out.replaceChildren(head, list);
+    } catch (e) {
+      out.replaceChildren(textEl('p', 'form-error', e.message || '匹配失败'));
+    }
+  });
+
+  // 详情弹窗
+  let tplCurrent = null;
+  let tplOpener = null;
+  let tplConfirmTimer = null;
+  function closeTemplate() {
+    if ($('tpl-modal').classList.contains('hidden')) return;
+    $('tpl-modal').classList.add('hidden');
+    $('tpl-detail').replaceChildren();
+    tplCurrent = null;
+    clearTimeout(tplConfirmTimer);
+    if (tplOpener && tplOpener.isConnected) tplOpener.focus();
+    tplOpener = null;
+  }
+  async function openTemplate(t, opener) {
+    tplCurrent = t;
+    tplOpener = opener || document.activeElement;
+    $('tpl-title').textContent = t.title || t.name;
+    $('tpl-sub').textContent = t.name + ' · ' + (t.global ? '全局（发布者 ' + t.owner + '）' : '账户 ' + t.owner) + ' · v' + t.version;
+    $('tpl-modal-error').textContent = '';
+    $('tpl-detail').replaceChildren(textEl('p', 'tpl-muted', '加载中…'));
+    syncGlobalButton(t);
+    $('tpl-modal').classList.remove('hidden');
+    $('tpl-close').focus();
+    try {
+      const r = await fetch('/admin/api/templates/' + encodeURIComponent(t.id), { cache: 'no-store' });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || '请求失败 (' + r.status + ')');
+      if (tplCurrent !== t) return;
+      renderTemplateDetail(data);
+    } catch (e) {
+      if (tplCurrent === t) $('tpl-detail').replaceChildren(textEl('p', 'form-error', '无法加载模板：' + e.message));
+    }
+  }
+
+  function section(title, ...children) {
+    const box = textEl('section', 'tpl-section');
+    box.append(textEl('h3', '', title), ...children);
+    return box;
+  }
+
+  function renderTemplateDetail(d) {
+    const parts = [];
+    if (d.layout) {
+      // 预览在沙箱里运行：没有 allow-same-origin，读不到管理端的 cookie
+      // 按 1280px 宽的桌面窗口渲染，再整体缩小到弹窗宽度，宽版式的模板也能看全
+      const src = '/admin/api/templates/' + encodeURIComponent(d.id) + '/preview';
+      const wrap = textEl('div', 'tpl-preview-wrap');
+      const frame = document.createElement('iframe');
+      frame.className = 'tpl-preview';
+      frame.setAttribute('sandbox', 'allow-scripts');
+      frame.setAttribute('referrerpolicy', 'no-referrer');
+      frame.title = (d.title || d.name) + ' 的示例预览';
+      frame.src = src;
+      wrap.appendChild(frame);
+      const fit = () => {
+        const scale = Math.min(1, wrap.clientWidth / PREVIEW_WIDTH);
+        frame.style.width = PREVIEW_WIDTH + 'px';
+        frame.style.height = Math.ceil(wrap.clientHeight / scale) + 'px';
+        frame.style.transform = 'scale(' + scale + ')';
+      };
+      if (window.ResizeObserver) new ResizeObserver(fit).observe(wrap);
+      requestAnimationFrame(fit);
+      const note = textEl('p', 'tpl-muted', '用模板自带的示例数据渲染，按 1280px 宽缩放显示；打印和导出按钮在这里不可用。');
+      const open = textEl('a', 'link-btn', '在新标签页打开');
+      open.href = src;
+      open.target = '_blank';
+      open.rel = 'noopener noreferrer';
+      note.append(' ', open);
+      parts.push(section('示例预览', wrap, note));
+    } else {
+      parts.push(section('示例预览', textEl('p', 'tpl-muted', '自由排版模板：页面由 agent 按说明生成，没有固定的预览。')));
+    }
+    const info = textEl('dl', 'tpl-info');
+    const row = (k, v) => { info.append(textEl('dt', '', k), v instanceof Node ? v : textEl('dd', '', v)); };
+    const kws = textEl('dd', 'labels');
+    for (const w of d.match || []) kws.appendChild(chip(w, 'kw'));
+    row('触发关键词', kws);
+    row('功能', featureText(d));
+    row('默认分类', [d.category ? categoryLabel(d.category) : '未分类', ...(d.tags || []).map((x) => '#' + x)].join(' '));
+    if (d.pageTitle) row('页面标题', d.pageTitle);
+    row('生成的页面', d.pages ? d.pages + ' 个' + (d.lastUsedAt ? '，最近 ' + fmtTime(d.lastUsedAt) : '') : '还没有');
+    parts.push(section('概况', info));
+    if ((d.fields || []).length) {
+      const list = textEl('ul', 'tpl-fields');
+      for (const f of d.fields) {
+        const li = document.createElement('li');
+        const head = textEl('div', 'f-head');
+        head.append(textEl('code', '', f.path), textEl('span', 'f-type', f.type || ''), ...(f.required ? [textEl('span', 'f-req', '必填')] : []));
+        li.appendChild(head);
+        const note = [f.title, f.description, f.enum ? '可选值：' + f.enum.join(' / ') : ''].filter(Boolean).join(' · ');
+        if (note) li.appendChild(textEl('div', 'f-note', note));
+        list.appendChild(li);
+      }
+      parts.push(section('字段（' + d.fields.length + '）', list));
+    }
+    if (d.guide) parts.push(section('给 agent 的说明', textEl('pre', 'tpl-guide', d.guide)));
+    const versionsList = textEl('ol', 'version-list');
+    for (const v of [...(d.versions || [])].reverse()) {
+      const li = document.createElement('li');
+      const info2 = textEl('div', 'info');
+      info2.append(textEl('div', 'msg' + (v.message ? '' : ' empty'), v.message || '没有说明'), textEl('div', 'sub', fmtTime(v.createdAt)));
+      li.append(textEl('span', 'ver', 'v' + v.n), info2);
+      if (v.n === d.version) li.appendChild(textEl('span', 'current-tag', '当前'));
+      versionsList.appendChild(li);
+    }
+    parts.push(section('版本', versionsList));
+    $('tpl-detail').replaceChildren(...parts);
+  }
+
+  function syncGlobalButton(t) {
+    const btn = $('tpl-global');
+    clearTimeout(tplConfirmTimer);
+    btn.disabled = false;
+    btn.dataset.confirm = '';
+    btn.className = 'btn ' + (t.global ? 'btn-quiet' : 'btn-accent');
+    btn.textContent = t.global ? '取消全局' : '设为全局';
+    btn.title = t.global ? '取消后只有账户 ' + t.owner + ' 能使用这个模板' : '设为全局后所有账户都能使用；同名的账户模板优先';
+  }
+  $('tpl-global').addEventListener('click', async () => {
+    const t = tplCurrent;
+    if (!t) return;
+    const btn = $('tpl-global');
+    // 取消全局会让其他账户突然用不了，先确认一次
+    if (t.global && !btn.dataset.confirm) {
+      btn.dataset.confirm = '1';
+      btn.className = 'btn btn-del';
+      btn.textContent = '确认取消全局';
+      tplConfirmTimer = setTimeout(() => syncGlobalButton(t), 4000);
+      return;
+    }
+    clearTimeout(tplConfirmTimer);
+    btn.disabled = true;
+    $('tpl-modal-error').textContent = '';
+    try {
+      const r = await fetch('/admin/api/templates/' + encodeURIComponent(t.id), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ global: !t.global }),
+      });
+      if (r.status === 401) {
+        location.href = '/admin/login';
+        return;
+      }
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(r.status === 409 ? '已经有同名的全局模板' : (data.error || '操作失败'));
+      t.global = !!data.global;
+      toast(t.global ? '已设为全局：' + t.name : '已取消全局：' + t.name, 'ok');
+      $('tpl-sub').textContent = t.name + ' · ' + (t.global ? '全局（发布者 ' + t.owner + '）' : '账户 ' + t.owner) + ' · v' + t.version;
+      syncGlobalButton(t);
+      await loadTemplateList();
+      renderTemplates();
+    } catch (e) {
+      $('tpl-modal-error').textContent = e.message || '操作失败';
+      syncGlobalButton(t);
+    }
+  });
+  $('tpl-close').addEventListener('click', closeTemplate);
+  $('tpl-modal').addEventListener('click', (e) => { if (e.target === $('tpl-modal')) closeTemplate(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTemplate(); });
+  $('btn-tpl-refresh').addEventListener('click', loadTemplates);
+  $('btn-tpl-retry').addEventListener('click', loadTemplates);
+
   document.querySelectorAll('.tab').forEach((tab) => {
     tab.addEventListener('click', () => {
       showPanel(tab.dataset.panel);
-      history.replaceState(null, '', tab.dataset.panel === 'accounts' ? '#accounts' : location.pathname);
+      history.replaceState(null, '', tab.dataset.panel === 'resources' ? location.pathname : '#' + tab.dataset.panel);
     });
   });
   $('btn-acct-refresh').addEventListener('click', () => loadAccounts(true));
@@ -1476,14 +1863,17 @@
       $('visit-filter').value = visitFilter;
     }
     for (const key of Object.keys(facetFilters)) if (preset.get(key)) facetFilters[key] = preset.get(key);
+    if (/^[0-9A-Za-z]{16}$/.test(preset.get('template') || '')) templateFilter = preset.get('template');
     history.replaceState(null, '', location.pathname);
   }
 
   load();
+  loadTemplateList().catch(() => {});
 })();
 
 function syncPanelFromHash() {
-  document.querySelector('[data-panel=' + (location.hash === '#accounts' ? 'accounts' : 'resources') + ']').click();
+  const panel = { '#accounts': 'accounts', '#templates': 'templates' }[location.hash] || 'resources';
+  document.querySelector('[data-panel=' + panel + ']').click();
 }
-if (location.hash === '#accounts') syncPanelFromHash();
+if (location.hash === '#accounts' || location.hash === '#templates') syncPanelFromHash();
 window.addEventListener('hashchange', syncPanelFromHash);

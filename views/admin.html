@@ -19,6 +19,7 @@
   <div><p class="nav-label">管理控制台</p><nav class="side-nav" aria-label="管理导航">
     <a class="nav-item" href="/admin/statistics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 20V10m8 10V4m8 16v-7M2 20h20"/></svg>统计总览</a>
     <button type="button" class="nav-item tab active" data-panel="resources" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>资源管理</button>
+    <button type="button" class="nav-item tab" data-panel="templates"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 9v12"/></svg>模板</button>
     <button type="button" class="nav-item tab" data-panel="accounts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3m2-15a3 3 0 0 1 0 6m4 9v-3a6 6 0 0 0-3-5"/></svg>来源与账户</button>
   </nav></div>
   <div class="sidebar-bottom"><strong><span class="status-dot"></span>已登录管理员</strong>访问码与分享信息仅管理员可见。
@@ -90,6 +91,7 @@
           <label class="select-wrap">项目<select class="facet" id="project-filter" data-facet="project"><option value="">全部</option></select></label>
           <label class="select-wrap">Agent<select class="facet" id="agent-filter" data-facet="agent"><option value="">全部</option></select></label>
           <label class="select-wrap">标签<select class="facet" id="tag-filter" data-facet="tag"><option value="">全部</option></select></label>
+          <label class="select-wrap">模板<select id="template-filter"><option value="">全部</option></select></label>
           <label class="select-wrap" id="visit-filter-wrap">打开情况<select id="visit-filter">
             <option value="">全部</option>
             <option value="never">从未打开</option>
@@ -186,6 +188,42 @@
         <p class="hint">在 config.yaml 的 tokens 列表中添加 name + token</p>
       </div>
       <div class="acct-grid hidden" id="acct-grid"></div>
+    </section>
+    <section class="hidden" id="panel-templates">
+      <div class="page-heading">
+        <div>
+          <div class="eyebrow">TEMPLATES</div>
+          <h1>模板 <span class="count" id="tpl-count"></span></h1>
+          <p id="tpl-stats">固定版式的页面模板。agent 按关键词或配套 skill 选用，只写数据。</p>
+        </div>
+        <div class="heading-actions">
+          <button type="button" class="btn" id="btn-tpl-refresh"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>刷新</button>
+        </div>
+      </div>
+      <form class="card tpl-try" id="tpl-try">
+        <div class="tpl-try-head"><strong>测试触发</strong><span>输入用户会说的一句话，看看这个账户会用到哪个模板。</span></div>
+        <div class="tpl-try-row">
+          <label class="select-wrap">账户<select id="tpl-try-account" aria-label="账户"></select></label>
+          <input type="search" id="tpl-try-q" placeholder="例如：给 ACME 出 10 月账单" autocomplete="off" aria-label="测试的一句话" maxlength="2000">
+          <button type="submit" class="btn btn-accent">测试</button>
+        </div>
+        <div class="tpl-try-result" id="tpl-try-result" aria-live="polite"></div>
+      </form>
+      <div class="card state" id="tpl-loading">
+        <div class="spinner"></div>
+        <p>加载模板…</p>
+      </div>
+      <div class="card state hidden" id="tpl-error">
+        <div class="icon">!</div>
+        <p id="tpl-error-msg">加载失败</p>
+        <p class="hint"><button type="button" class="btn btn-accent btn-sm" id="btn-tpl-retry">重试</button></p>
+      </div>
+      <div class="card state hidden" id="tpl-empty">
+        <div class="icon">∅</div>
+        <p>还没有模板</p>
+        <p class="hint">用 <code>dview template push &lt;目录&gt;</code> 发布；仓库里的 <code>examples/templates/</code> 有两个示例</p>
+      </div>
+      <div class="tpl-grid hidden" id="tpl-grid"></div>
     </section>
   </main>
 </div>
@@ -286,6 +324,18 @@
       <p class="form-error" id="versions-error" role="alert"></p>
       <div class="actions">
         <button type="button" class="btn" id="versions-close">关闭</button>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop hidden" id="tpl-modal" role="dialog" aria-modal="true" aria-labelledby="tpl-title">
+    <div class="modal modal-xwide">
+      <h2 id="tpl-title">模板</h2>
+      <p class="tpl-sub" id="tpl-sub"></p>
+      <div class="tpl-detail" id="tpl-detail" aria-live="polite"></div>
+      <p class="form-error" id="tpl-modal-error" role="alert"></p>
+      <div class="actions">
+        <button type="button" class="btn" id="tpl-global"></button>
+        <button type="button" class="btn" id="tpl-close">关闭</button>
       </div>
     </div>
   </div>

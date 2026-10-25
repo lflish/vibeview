@@ -32,10 +32,10 @@
 | --- | --- | --- |
 | [admin-statistics.md](./admin-statistics.md) | 已实现 | 管理端统计 |
 | [resource-versions.md](./resource-versions.md) | 已实现（v1.4.0） | 固定链接、更新内容、版本历史（模板和评审的基础） |
-| [page-templates.md](./page-templates.md) | 已实现（v1.4.0；管理页见 template-admin） | 页面模板：关键词匹配、数据渲染、按模板开启功能 |
+| [page-templates.md](./page-templates.md) | 已实现（v1.4.0；管理页 v1.4.4） | 页面模板：关键词匹配、数据渲染、按模板开启功能 |
 | [template-skills.md](./template-skills.md) | 已实现（v1.4.2） | 根据模板生成本机的配套 skill，agent 直接触发 |
 | [home-intro.md](./home-intro.md) | 已实现（v1.4.3） | 首页和 README 介绍版本、模板和模板 skill |
-| [template-admin.md](./template-admin.md) | 已确认 | 管理端模板页、资源按模板筛选和导出 |
+| [template-admin.md](./template-admin.md) | 已实现（v1.4.4） | 管理端模板页、资源按模板筛选和导出 |
 | [review-comments.md](./review-comments.md) | 草案 | 需求评审：页面批注、多角色评论、确认签字 |
 
-实现顺序：resource-versions → page-templates（模板核心）→ review-comments 与导出功能 → 模板管理页。
+实现顺序：resource-versions → page-templates（模板核心、导出）→ 模板配套 skill → 模板管理页 → review-comments。
