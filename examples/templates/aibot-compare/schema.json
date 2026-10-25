@@ -61,10 +61,9 @@
     "footer": {
       "type": "object",
       "title": "页脚",
+      "description": "页脚固定显示 vibeview 的介绍和仓库地址",
       "properties": {
-        "text": { "type": "string", "title": "页脚文字", "description": "如 项目名 · 一句话介绍", "maxLength": 80 },
-        "handle": { "type": "string", "title": "推特账号", "description": "如 @yourname", "maxLength": 40 },
-        "url": { "type": "string", "title": "链接", "description": "如 github.com/you/project", "maxLength": 120 }
+        "handle": { "type": "string", "title": "推特账号", "description": "可选，显示在仓库地址前面，如 @yourname", "maxLength": 40 }
       }
     }
   }

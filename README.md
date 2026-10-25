@@ -39,6 +39,8 @@ Sharing and organizing a file should be as easy as generating it. Upload with `d
 | One upload workflow for HTML, images, video, and multi-page sites. Built for AI reports, visualizations, page prototypes, front-end builds, and short demos. | Random access codes by default, with adjustable expiration, reset, no expiration, or explicit public access. Original files are protected too. |
 | **Find it as your library grows** | **Use your existing tools** |
 | Descriptions, sources, creation dates, and age at a glance. Organize pages by category, project, agent, and tag; search, filter, sort, paginate, and delete in bulk. | Upload through the CLI, curl, AI Skills, or CI. Admin pages support light, dark, and system themes, starting with light. |
+| **One link, many versions** | **Templates: agents supply only data** |
+| Upload the same file again to add a version; the link and access code stay the same. Reviewers keep one link however many times a requirement or prototype changes, and can open any earlier version. | Turn fixed-format pages such as bills and reports into templates: the agent writes only the data, and the template validates it, renders it, and computes totals. Printing and Excel export are enabled per template, and each template can generate a companion skill. |
 | **Know who is looking** | **Organize by project** |
 | Opens and last-opened time for every link, successful and failed access-code checks, and visits to expired links show which shares are used and which can be cleaned up. Only daily counts are stored; no IPs. | Uploads record the git repository name as their project. Switch projects like folders in resource management, and view uploads and opens per project in statistics. |
 
@@ -164,6 +166,25 @@ dview upload ./dist --json        # The directory must have index.html at its ro
 ```
 
 The site becomes **one** resource with **one** access code, and its pages link to each other with relative paths (`about.html`, `assets/app.js`). Use relative asset paths when building (for Vite, `base: './'`) and hash routing for single-page apps. Hidden files (such as `.env`), `node_modules`, and symlinks are not uploaded. AI agents pick between a single HTML file and a site automatically; `/dview --simple` or `/dview --site` forces a mode. See [multi-page sites](docs/user-guide.en.md#multi-page-sites).
+
+### Update pages and use templates
+
+Inside a git repository, `dview` records "file path → link" in `.dview.json` at the repository root. Uploading the same file again adds a version to the same link:
+
+```bash
+dview upload docs/prd.html -m "Add refunds to checkout"   # Same link and access code
+dview versions <id>                                        # History; version n is at /v/<id>/@n
+```
+
+Fixed-format pages come from templates, and agents write only the data:
+
+```bash
+dview template push examples/templates/vendor-bill             # Publish a template
+dview render vendor-bill --data bills/acme-2026-10.json --json # Render the data and upload
+dview template skills sync                                     # Generate Claude Code skills for templates
+```
+
+Two example templates are included: a monthly vendor bill (printing and Excel export) and an AI bot comparison card ready to share on X. See [updates and versions](docs/user-guide.en.md#updates-and-versions) and [page templates](docs/user-guide.en.md#page-templates).
 
 **AI integrations:** [Claude Code setup](docs/user-guide.en.md#ai-skills-and-integrations) · [Codex / Cursor / Agents](AGENTS.md) · [Upload Skill](skill/dview-upload/SKILL.md) · [curl and CI](docs/user-guide.en.md#upload-and-share). Generated pages use a light theme by default.
 

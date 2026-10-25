@@ -172,6 +172,8 @@ dview upload <file> --template <name>         # 自由排版的模板
 
 ### 模板管理页（下一轮）
 
+已拆成单独的 spec：[template-admin.md](./template-admin.md)。
+
 - 列表：名称、触发关键词、启用的功能、版本、生成过的页面数、最近使用时间
 - 顶部"测试触发"输入框，和 `match` 接口结果一致
 - 关键词冲突提示、详情预览（用 `example.json` 渲染）、版本历史、设为全局、编辑关键词

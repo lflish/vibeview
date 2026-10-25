@@ -39,6 +39,8 @@
 | HTML、图片、视频和多页面站点使用同一套上传流程。适合 AI 生成的报告、可视化图表、页面原型、前端打包产物和短视频。 | 新文件默认生成随机访问码，有效期可调整。支持重置、不过期或显式公开，原文件也受保护。 |
 | **文件多了，也找得到** | **接入你已有的工具** |
 | 简介、来源、创建时间和持续时长一目了然；页面按分类、项目、agent 和标签整理，搜索、筛选、排序、分页和批量删除帮助管理。 | CLI、curl、AI Skill 和 CI 都能上传。管理页支持浅色、深色和跟随系统，首次默认浅色。 |
+| **同一个链接，持续更新** | **页面模板，agent 只填数据** |
+| 同一个文件再上传就是新版本，链接和访问码不变；需求和原型改多少版，评审的人都只用一个链接，也能翻回任意一版。 | 账单、周报这类固定版式的页面做成模板：agent 只整理数据，由模板校验、渲染和计算合计；打印、导出 Excel 按模板开启，每个模板还能生成配套 skill。 |
 | **知道谁在看** | **按项目归档** |
 | 每个链接的打开次数和最后打开时间、访问码验证成功与失败、过期链接被访问，一眼看出哪些分享有人看、哪些可以清理。只保存每日计数，不记录 IP。 | 上传时自动记录 git 仓库名作为项目。资源管理用项目导航像目录一样切换，统计也能按项目查看上传和打开。 |
 
@@ -164,6 +166,25 @@ dview upload ./dist --json        # 目录根部必须有 index.html
 ```
 
 整个站点是**一个**资源、共用**一个**访问码，页面之间用相对路径互相跳转（`about.html`、`assets/app.js`）。构建时使用相对资源路径（Vite 设 `base: './'`），单页应用用 hash 路由。`.env` 等隐藏文件、`node_modules` 和符号链接不会上传。AI 会自动判断生成单个 HTML 还是多页面站点；`/dview --simple` 或 `/dview --site` 可以强制指定。详见[多页面站点](docs/user-guide.zh-CN.md#多页面站点)。
+
+### 更新页面与页面模板
+
+在 git 仓库里上传时，`dview` 把"文件路径 → 链接"记在仓库根目录的 `.dview.json`。同一个文件再上传，就是同一个链接的新版本：
+
+```bash
+dview upload docs/prd.html -m "支付流程加上退款"   # 链接和访问码不变
+dview versions <id>                                # 版本历史；第 n 版在 /v/<id>/@n
+```
+
+固定版式的页面用模板生成，agent 只写数据：
+
+```bash
+dview template push examples/templates/vendor-bill            # 发布模板
+dview render vendor-bill --data bills/acme-2026-10.json --json # 用数据渲染并上传
+dview template skills sync                                    # 为模板生成 Claude Code skill
+```
+
+仓库自带两个示例模板：供应商月度账单（可打印、导出 Excel）和 AI Bot 多角度对比（适合发推的对比卡片）。详见[更新与版本](docs/user-guide.zh-CN.md#更新与版本)和[页面模板](docs/user-guide.zh-CN.md#页面模板)。
 
 **AI 接入：** [Claude Code 安装](docs/user-guide.zh-CN.md#ai-skill-与工具接入) · [Codex / Cursor / Agent](AGENTS.md) · [上传 Skill](skill/dview-upload/SKILL.md) · [curl 与 CI](docs/user-guide.zh-CN.md#上传与分享)。生成页面默认使用浅色风格。
 

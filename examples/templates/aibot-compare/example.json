@@ -21,6 +21,5 @@
     { "group": "成本", "name": "免费使用", "values": [{ "level": "yes", "text": "开源免费" }, { "level": "partial", "text": "有免费额度" }, { "level": "partial", "text": "需订阅" }, { "level": "no", "text": "按席位" }] },
     { "group": "成本", "name": "开源许可", "values": [{ "level": "yes", "text": "MIT" }, { "level": "no" }, { "level": "no" }, { "level": "unknown" }] }
   ],
-  "sources": ["示例数据，仅用于展示模板效果，不代表任何真实产品"],
-  "footer": { "text": "你的项目 · 一句话介绍", "handle": "@yourname", "url": "github.com/you/project" }
+  "sources": ["示例数据，仅用于展示模板效果，不代表任何真实产品"]
 }
