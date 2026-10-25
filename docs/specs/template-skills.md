@@ -88,3 +88,4 @@ dview template skills sync --dir <目录>      # 写到其他 agent 的 skill �
 ## 变更记录
 
 - 2026-10-25：同步过的全局模板之后保持同步（原设计中不加 `--global` 会被删除，用起来不自然）。
+- 2026-10-25：示例模板 aibot-compare 的页脚固定为 vibeview 的一句话介绍和仓库地址，数据里只保留可选的 `footer.handle`（推特账号）；去掉 `footer.text` / `footer.url` 和示例里的占位文字。
