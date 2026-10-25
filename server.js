@@ -148,6 +148,8 @@ function mapItem(m) {
     ...classification.normalize(m),
     createdAt: m.createdAt,
     ...versions.summary(full),
+    ...(full.template ? { template: { id: full.template.id, name: full.template.name, version: full.template.version } } : {}),
+    exportable: !!(full.features && full.features.export && full.features.export.xlsx),
     access: previewAccess.info(full),
     url: `${config.baseUrl}/v/${m.id}`,
   };
@@ -226,6 +228,7 @@ function listFilters(query = {}) {
     project: text(query.project) === '-' ? '-' : classification.normalizeLabel(text(query.project)),
     tag: classification.normalizeTags(text(query.tag))[0] || '',
     visit: ['never', 'stale30', 'recent7'].includes(query.visit) ? query.visit : '',
+    template: /^[0-9A-Za-z]{16}$/.test(String(query.template || '')) ? String(query.template) : '',
   };
 }
 
@@ -242,6 +245,7 @@ function matchesFilters(item, f) {
     if (f.visit === 'recent7' && last < new Date(Date.now() - 7 * 86400000).toISOString()) return false;
   }
   if (f.tag && !item.tags.includes(f.tag)) return false;
+  if (f.template && !(item.template && item.template.id === f.template)) return false;
   if (f.q) {
     const haystack = [item.filename, item.description, item.source, item.id, item.type, item.url,
       item.category, item.agent, item.model, item.project, ...item.tags]
@@ -921,7 +925,8 @@ app.get('/admin/api/list', requireAdmin, (req, res) => {
     : 'time';
   const order = req.query.order === 'asc' ? 'asc' : 'desc';
 
-  const indexed = resourceIndex.listPage({ page: requestedPage, pageSize, sort, order, ...filters });
+  // 索引里没有模板字段，按模板筛选时走下面的全量路径
+  const indexed = filters.template ? null : resourceIndex.listPage({ page: requestedPage, pageSize, sort, order, ...filters });
   if (indexed) {
     return res.json({
       ...indexed,
@@ -986,10 +991,57 @@ app.get('/admin/api/list', requireAdmin, (req, res) => {
 
 app.get('/admin/api/item/:id/export.xlsx', requireAdmin, exportXlsx);
 
-// 模板（管理员）：查看全部模板，设为全局或取消。管理页下一轮加。
+// 模板（管理员）：列表、测试触发、详情、示例预览、设为全局或取消。
+// 使用情况按资源元数据统计：当前版本由哪个模板生成。
+function templateUsage() {
+  const usage = new Map();
+  for (const meta of store.listAll()) {
+    const id = meta.template && meta.template.id;
+    if (!id) continue;
+    const used = usage.get(id) || { pages: 0, lastUsedAt: null };
+    used.pages += 1;
+    const at = meta.updatedAt || meta.createdAt || null;
+    if (at && (!used.lastUsedAt || at > used.lastUsedAt)) used.lastUsedAt = at;
+    usage.set(id, used);
+  }
+  return usage;
+}
+
 app.get('/admin/api/templates', requireAdmin, (_req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json({ templates: templates.adminList() });
+  res.json({ templates: templates.adminList(templateUsage()) });
+});
+// 和该账户调用 GET /api/templates/match 的结果相同
+app.get('/admin/api/templates/match', requireAdmin, (req, res) => {
+  const account = accounts.findByName(typeof req.query.account === 'string' ? req.query.account : '');
+  if (!account) return res.status(404).json({ error: 'account not found' });
+  const q = typeof req.query.q === 'string' ? req.query.q.slice(0, 2000) : '';
+  res.set('Cache-Control', 'no-store');
+  res.json({ query: q, account: account.name, templates: templates.match(account, q) });
+});
+app.get('/admin/api/templates/:id', requireAdmin, (req, res) => {
+  const meta = templates.byId(req.params.id);
+  if (!meta) return res.status(404).json({ error: 'template not found' });
+  res.set('Cache-Control', 'no-store');
+  res.json({ ...templates.detail(meta), ...templates.adminFields(meta, templateUsage()) });
+});
+// 用 example.json 渲染当前版本。模板由上传方编写，所以和预览页一样放进沙箱：
+// 没有 allow-same-origin，页面脚本读不到管理端的 cookie，也调不了管理接口。
+app.get('/admin/api/templates/:id/preview', requireAdmin, (req, res) => {
+  const meta = templates.byId(req.params.id);
+  if (!meta) return res.status(404).json({ error: 'template not found' });
+  const { manifest } = templates.current(meta);
+  if (!manifest.layout) return res.status(404).json({ error: 'free-layout template has no preview' });
+  const files = templates.readFiles(meta);
+  const data = manifest.example ? JSON.parse(files[manifest.example]) : {};
+  const { html } = renderTemplate({ layout: files[manifest.layout], data, pageTitle: manifest.pageTitle, features: manifest.features });
+  res.set({
+    'Content-Type': 'text/html; charset=utf-8',
+    'Content-Security-Policy': "sandbox allow-scripts; frame-ancestors 'self'; base-uri 'none'; form-action 'none'",
+    'X-Frame-Options': 'SAMEORIGIN',
+    'Cache-Control': 'no-store',
+  });
+  res.send(html);
 });
 app.patch('/admin/api/templates/:id', requireAdmin, requireSameOrigin, async (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
