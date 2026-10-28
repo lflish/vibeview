@@ -40,6 +40,9 @@ result = index.listPage({ q: 'needle', pageSize: 20 });
 assert.strictEqual(result.total, 1);
 assert.strictEqual(result.items[0].id, 'alpha');
 assert.deepStrictEqual(index.sources(), ['alice', 'bob']);
+assert.strictEqual(result.items[0].indexed, true);
+assert.deepStrictEqual(index.idsBySource('bob'), ['beta']);
+assert.deepStrictEqual(index.idsBySource('nobody'), []);
 assert.strictEqual(index.usageBySource().get('alice').bytes, 10);
 
 // 分类筛选、未分类筛选、标签与 facet 计数

@@ -18,6 +18,14 @@ try {
   const file = path.join(root, 'index.html');
   fs.writeFileSync(file, '<html><head><title>Stored title</title></head></html>');
   assert.equal(metadata.descriptionFromFile(file, 'html'), 'Stored title');
+  // 只读取前 MAX_HTML_BYTES：位于之后的标题不会被读到
+  const big = path.join(root, 'big.html');
+  fs.writeFileSync(big, '<title>Head title</title>' + ' '.repeat(metadata.MAX_HTML_BYTES));
+  assert.equal(metadata.descriptionFromFile(big, 'html'), 'Head title');
+  const late = path.join(root, 'late.html');
+  fs.writeFileSync(late, ' '.repeat(metadata.MAX_HTML_BYTES) + '<title>Too late</title>');
+  assert.equal(metadata.descriptionFromFile(late, 'html'), '');
+  assert.equal(metadata.descriptionFromFile(path.join(root, 'missing.html'), 'html'), '');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

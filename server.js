@@ -126,16 +126,20 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: config.storage.maxSizeMb * 1024 * 1024 },
+  // 一个文件，加上分类、版本说明、访问码等少量文本字段（目前约 15 个）
+  limits: { fileSize: config.storage.maxSizeMb * 1024 * 1024, files: 1, fields: 40, fieldSize: 64 * 1024, parts: 50 },
   fileFilter(req, file, cb) {
-    cb(null, store.typeForMime(file.mimetype, file.originalname) !== null);
+    if (store.typeForMime(file.mimetype, file.originalname) === null) return cb(new Error('unsupported file type'));
+    cb(null, true);
   },
 }).single('file');
 
 function mapItem(m) {
   // 索引行不含站点的 zip 名、文件数和版本信息，从元数据补齐
   const full = store.readMeta(m.id) || m;
-  const description = m.description || metadata.descriptionFromFile(store.filePath(full.type === 'site' ? { ...full, filename: 'index.html' } : full), m.type);
+  // 索引行的描述已在写入/重建时提取过，为空就是页面本身没有；只有 JSON 兜底路径才读 HTML 文件
+  const description = m.description || (m.indexed ? ''
+    : metadata.descriptionFromFile(store.filePath(full.type === 'site' ? { ...full, filename: 'index.html' } : full), m.type));
   return {
     id: m.id,
     type: m.type,
@@ -373,7 +377,9 @@ app.post('/upload', requireToken, (req, res) => {
   upload(req, res, async (err) => {
     if (err) {
       cleanupFailedUpload(req);
-      const msg = err.code === 'LIMIT_FILE_SIZE' ? 'file too large' : err.message;
+      const msg = err.code === 'LIMIT_FILE_SIZE' ? 'file too large'
+        : err.code === 'LIMIT_UNEXPECTED_FILE' || err.code === 'LIMIT_FILE_COUNT' ? 'only one file (field name must be "file")'
+        : err.message;
       return res.status(400).json({ error: msg });
     }
     if (!req.file) return res.status(400).json({ error: 'no file (field name must be "file")' });
@@ -420,7 +426,7 @@ app.post('/upload', requireToken, (req, res) => {
 
     const entry = {
       filename: site ? 'index.html' : safeFilename(req.file.originalname),
-      mime: site ? 'text/html' : req.file.mimetype,
+      mime: site ? 'text/html' : store.mimeFor(req.uploadType, safeFilename(req.file.originalname), req.file.mimetype),
       size: site ? site.size : req.file.size,
       ...(site ? { archiveName: safeFilename(req.file.originalname), fileCount: site.fileCount } : {}),
       createdAt: new Date().toISOString(),
@@ -538,7 +544,10 @@ app.get('/api/me', requireToken, (req, res) => {
 
 app.get('/api/me/items', requireToken, (req, res) => {
   const filters = listFilters(req.query);
-  const items = withVisits(store.listBySource(req.account.name).map(mapItem)).filter((item) => matchesFilters(item, filters));
+  // 优先用索引找出本账户的资源，只读取这些元数据，而不是扫描全部账户的 JSON
+  const ids = resourceIndex.idsBySource(req.account.name);
+  const metas = ids ? ids.map((id) => store.readMeta(id)).filter(Boolean) : store.listBySource(req.account.name);
+  const items = withVisits(metas.map(mapItem)).filter((item) => matchesFilters(item, filters));
   res.json({ items, account: accounts.publicAccountInfo(req.account) });
 });
 
@@ -827,7 +836,7 @@ app.post('/admin/login', requireSameOrigin, (req, res, next) => {
   res.redirect('/admin/login?error=1');
 });
 
-app.post('/admin/logout', (req, res) => {
+app.post('/admin/logout', requireSameOrigin, (req, res) => {
   // 同时清掉会话 cookie，否则退出后的预览仍会被当作管理员访问而不计入打开次数。
   req.session.destroy(() => { res.clearCookie('connect.sid'); res.redirect('/admin/login'); });
 });
@@ -1051,7 +1060,7 @@ app.patch('/admin/api/templates/:id', requireAdmin, requireSameOrigin, async (re
 app.get('/admin/api/item/:id/versions', requireAdmin, listVersions);
 app.delete('/admin/api/item/:id/versions/:n', requireAdmin, requireSameOrigin, deleteVersion);
 
-app.delete('/admin/api/item/:id', requireAdmin, (req, res) => {
+app.delete('/admin/api/item/:id', requireAdmin, requireSameOrigin, (req, res) => {
   const { id } = req.params;
   if (!store.isValidId(id)) return res.status(400).json({ error: 'bad id' });
   const ok = store.remove(id);
@@ -1059,7 +1068,7 @@ app.delete('/admin/api/item/:id', requireAdmin, (req, res) => {
 });
 
 // 批量删除用于资源较多时的日常清理；每次最多处理 100 个合法 id。
-app.delete('/admin/api/items', requireAdmin, (req, res) => {
+app.delete('/admin/api/items', requireAdmin, requireSameOrigin, (req, res) => {
   const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids : [];
   if (!ids.length || ids.length > 100) {
     return res.status(400).json({ error: 'ids must contain 1-100 items' });
@@ -1089,16 +1098,15 @@ app.get('/admin/api/accounts', requireAdmin, (req, res) => {
 });
 
 // 启用 / 停用账户（写入 data/account-state.json，不改 config.yaml）
-app.post('/admin/api/accounts/:name/disable', requireAdmin, (req, res) => {
-  const name = decodeURIComponent(req.params.name);
-  const result = accounts.setDisabled(name, true);
+// req.params 已由 Express 解码，不能再 decodeURIComponent（含 % 的名称会抛错或解错）。
+app.post('/admin/api/accounts/:name/disable', requireAdmin, requireSameOrigin, (req, res) => {
+  const result = accounts.setDisabled(req.params.name, true);
   if (!result.ok) return res.status(404).json(result);
   res.json(result);
 });
 
-app.post('/admin/api/accounts/:name/enable', requireAdmin, (req, res) => {
-  const name = decodeURIComponent(req.params.name);
-  const result = accounts.setDisabled(name, false);
+app.post('/admin/api/accounts/:name/enable', requireAdmin, requireSameOrigin, (req, res) => {
+  const result = accounts.setDisabled(req.params.name, false);
   if (!result.ok) return res.status(404).json(result);
   res.json(result);
 });
@@ -1110,14 +1118,23 @@ app.get('/', (req, res) => {
 
 // ---- 启动 ----
 startCleanupScheduler();
-// 退出前把内存中的访问计数写入磁盘（PM2 重启发送 SIGINT）。
-for (const signal of ['SIGINT', 'SIGTERM']) {
-  process.once(signal, () => {
+// 退出（PM2 重启发送 SIGINT）：停止接收新连接，等进行中的请求（如上传）结束，
+// 再把内存中的访问计数写入磁盘。最多等 10 秒。
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[vibeview] 收到 ${signal}，正在退出…`);
+  const finish = () => {
     visits.stop();
     process.exit(0);
-  });
+  };
+  server.close(finish);
+  server.closeIdleConnections();
+  setTimeout(finish, 10000).unref();
 }
-app.listen(config.port, config.host, () => {
+for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => shutdown(signal));
+const server = app.listen(config.port, config.host, () => {
   const mode = config.preview.proxyToRender
     ? `preview→${config.preview.renderUrl}`
     : 'preview=local';

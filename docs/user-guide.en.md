@@ -2,7 +2,7 @@
 
 [← README](../README.md) · [简体中文](user-guide.zh-CN.md)
 
-The service is named **vibeview**; its CLI is **`dview`**. Supported formats include HTML, PNG / JPG / GIF / WebP / SVG and other images, MP4 / WebM videos, and multi-page sites (a directory or zip). HTML descriptions use the uploaded `description` first, then fall back to `<meta name="description">`, `<title>`, or a heading. The default per-file limit is 50 MB, with indefinite retention.
+The service is named **vibeview**; its CLI is **`dview`**. Supported formats are HTML (.html/.htm), PNG / JPG / GIF / WebP / SVG images, MP4 / WebM videos, and multi-page sites (a directory or zip); for single files the server derives the type and raw response MIME from the extension rather than the client-reported MIME. HTML descriptions use the uploaded `description` first, then fall back to `<meta name="description">`, `<title>`, or a heading. The default per-file limit is 50 MB, with indefinite retention.
 
 ## Quick start
 
@@ -25,7 +25,7 @@ Edit `config.yaml` and set at least these fields:
 | `tokens[].name` | A unique upload source name, such as `my-machine` |
 | `tokens[].token` | Your own randomly generated upload token |
 | `admin.user` / `admin.password` | Your administrator username and password |
-| `admin.session_secret` | Your own randomly generated session signing secret |
+| `admin.session_secret` | Your own randomly generated session signing secret; required when `admin.password` is set — the server refuses to start if it is missing or still the example value |
 
 Run `openssl rand -hex 24` separately to generate the token and session secret. `config.yaml` is ignored by Git; keep its credentials out of the repository.
 

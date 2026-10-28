@@ -2,7 +2,7 @@
 
 [← README](../README.zh-CN.md) · [English](user-guide.en.md)
 
-服务名是 **vibeview**，命令行工具名是 **`dview`**。支持 HTML、PNG / JPG / GIF / WebP / SVG 等图片、MP4 / WebM 视频，以及多页面站点（目录或 zip）。HTML 简介优先读取上传的 `description`，否则从 `<meta name="description">`、`<title>` 或标题提取。默认单文件上限 50 MB，文件永久保留。
+服务名是 **vibeview**，命令行工具名是 **`dview`**。支持 HTML（.html/.htm）、PNG / JPG / GIF / WebP / SVG 图片、MP4 / WebM 视频，以及多页面站点（目录或 zip）；单文件的类型和原始文件的响应 MIME 由服务端按扩展名判定，不采用客户端上报的 MIME。HTML 简介优先读取上传的 `description`，否则从 `<meta name="description">`、`<title>` 或标题提取。默认单文件上限 50 MB，文件永久保留。
 
 ## 快速开始
 
@@ -25,7 +25,7 @@ cp config.example.yaml config.yaml
 | `tokens[].name` | 唯一的上传来源名，例如 `my-machine` |
 | `tokens[].token` | 自己生成的随机上传 token |
 | `admin.user` / `admin.password` | 管理员用户名和自己的密码 |
-| `admin.session_secret` | 自己生成的随机 session 签名密钥 |
+| `admin.session_secret` | 自己生成的随机 session 签名密钥；设置了 `admin.password` 时必填，未设置或保留示例值会拒绝启动 |
 
 可以用 `openssl rand -hex 24` 分别生成 token 和 session secret。`config.yaml` 已被 Git 忽略，其中的凭据不要提交到仓库。
 
