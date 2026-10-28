@@ -18,3 +18,6 @@ data/
 # 日志和系统文件
 *.log
 .DS_Store
+
+# Claude Code 本地个人配置
+.claude/settings.local.json
