@@ -28,6 +28,8 @@
 
 ## 索引
 
+从 2026-11 起，新需求按 devflow 放在 [docs/changes/](../changes/README.md)，这里只加一行链接。
+
 | Spec | 状态 | 说明 |
 | --- | --- | --- |
 | [admin-statistics.md](./admin-statistics.md) | 已实现 | 管理端统计 |
@@ -37,5 +39,6 @@
 | [home-intro.md](./home-intro.md) | 已实现（v1.4.3） | 首页和 README 介绍版本、模板和模板 skill |
 | [template-admin.md](./template-admin.md) | 已实现（v1.4.4） | 管理端模板页、资源按模板筛选和导出 |
 | [review-comments.md](./review-comments.md) | 草案 | 需求评审：页面批注、多角色评论、确认签字 |
+| [stats-create-vs-update](../changes/2026-11-09-stats-create-vs-update/spec.md) | 已验证（devflow） | 统计页区分新建和更新 |
 
 实现顺序：resource-versions → page-templates（模板核心、导出）→ 模板配套 skill → 模板管理页 → review-comments。
