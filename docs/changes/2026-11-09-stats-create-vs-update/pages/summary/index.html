@@ -31,24 +31,23 @@ code{background:#f1f5f9;border-radius:4px;padding:1px 5px;font-size:12px}
   <h1>统计页区分新建和更新</h1>
   <p class="sub">vibeview · 第一次用 devflow 跑的需求 · 等级 L1 · 更新于 2026-11-09</p>
 
-  <div class="status"><span class="pill ok">验证通过 · CI 通过</span><span class="pill wait">等你：确认合并 PR #3</span></div>
+  <div class="status"><span class="pill ok">已发布 v1.4.5</span><span class="pill">等你的事：没有</span></div>
 
   <div class="steps">
     <div class="step done"><b>需求 ✓</b>关口 A</div>
     <div class="step done"><b>设计 ✓</b>关口 B</div>
-    <div class="step done"><b>开发 ✓</b>7 个任务（含 2 个返工）</div>
-    <div class="step done"><b>测试 ✓</b>关口 C，复验 2 轮</div>
-    <div class="step now"><b>发布</b>等你确认合并</div>
+    <div class="step done"><b>开发 ✓</b>7 个任务</div>
+    <div class="step done"><b>测试 ✓</b>验证 4 轮</div>
+    <div class="step done"><b>发布 ✓</b>v1.4.5 已上线</div>
   </div>
 
   <section class="card">
-    <h2>等你决定（1 件）</h2>
-    <div class="decision">
-      <h3>合并 PR #3 吗？</h3>
-      <p>远程 main 的历史被改写过（作者改成 lflish），还新增了 3 个提交（上传和管理端加固等）。我把本需求的提交变基到新 main 上，开了新的 PR #3（旧 PR #2 已关闭，没有强推）。变基后独立复验通过，CI 两项都通过，GitHub 显示可以合并。</p>
-      <p>合并方式：squash，main 上只多一个提交。合并不会自动部署；发布 v1.4.5 和上生产会再单独列清单问你。</p>
-      <p class="rec">推荐：合并</p>
-    </div>
+    <h2>上线结果</h2>
+    <ul>
+      <li>发布 v1.4.5（GitHub Release），部署到本机生产，备份 20261109T055634Z-v1.4.5</li>
+      <li>上线后统计接口：近 30 天上传 64，其中新建 57、更新 7；7 条更新都是回填的，和资源里保留的 7 个历史版本一致；记录起点没有被重置；日志没有新错误</li>
+      <li>公网 HTTPS 从本机访问超时：域名解析到的地址不是本机，部署前就这样，和本次发布无关，需要你看一下 DNS 或中转</li>
+    </ul>
   </section>
 
   <section class="card">
@@ -98,6 +97,8 @@ code{background:#f1f5f9;border-radius:4px;padding:1px 5px;font-size:12px}
   <section class="card">
     <h2>历史</h2>
     <ul>
+      <li>2026-11-09 发布 v1.4.5 并上线，回填 7 条历史更新</li>
+      <li>2026-11-09 合并 PR #3</li>
       <li>2026-11-09 变基到改写后的 main，PR #3 复验和 CI 通过，等你确认合并</li>
       <li>2026-11-09 按你的回复修了深色标签和对比度，复验通过</li>
       <li>2026-11-09 机器关口 C 通过（有备注）</li>
