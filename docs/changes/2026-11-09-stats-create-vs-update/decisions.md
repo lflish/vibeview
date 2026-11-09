@@ -31,3 +31,5 @@
 | 19 | 发布 | 远程 main 的历史被改写（作者改为 lflish，同样内容新 hash）并多了 3 个提交（72f0b1e 安全加固等），PR #2 冲突。把本需求的提交变基到 origin/main，放到新分支 change/stats-create-vs-update-2，开新 PR，关闭 #2；不对旧分支强推 | 机械 | decisions 第四节（强推要确认） | 新分支 + 新 PR 不需要强推；直接合并旧共同祖先冲突太多 | 强推旧分支；合并 origin/main | 低 | — |
 | 20 | 发布 | 变基冲突只有 package.json（双方各加了一个脚本，都保留）；变基后 npm test、test:security、test:browser 全部通过；默认分支代码前移 → 按规则 4 复验一次 | 机械 | verification.md 规则 4 | — | — | 低 | — |
 | 21 | 发布 | 用户确认合并；合并前重查：PR 头 = 本地 HEAD，origin/main 未前移，CI 通过，指纹 055a4c5 与 verdict 一致；squash 合并 | 机械 | dev-release 第 3 步 | — | — | — | 已合并 5609ef1 |
+| 22 | 发布 | 部署前检查发现公网 HTTPS 超时（DNS 指向 179.253.228.158，本机是 154.17.12.106；本机 nginx 经 SNI 访问 200）。判断为部署前就存在的网络/DNS 问题，和本次发布无关，继续部署；deploy.sh 按约定以退出码 3 告警、不回滚 | 机械 | deploy-view“区分原有故障和新回归” | 部署只改本机代码，不影响公网路径 | 停下等用户 | 中：若用户依赖公网访问，问题仍在 | 写进最终报告 |
+| 23 | 发布 | post_check 的“首页版本号”不适用（首页不显示版本），改用 RELEASE 记录和 package.json 确认 1.4.5 | 机械 | — | — | — | 低 | 建议改 .devflow.yml 的 post_check |
