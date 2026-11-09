@@ -246,6 +246,8 @@ dview edit Ab3xK9mP2qR7sT1v --tag ''               # 清空标签
 
 从资源管理的「统计」入口进入 `/admin/statistics`。页面提供今日上传、近 7 / 30 天或本月上传、当前文件数和占用空间、每日趋势、月历、类型分布、来源排行以及最近上传/删除活动。来源和类型会联动筛选；点击趋势柱或日历日期可查看当日记录，并分页浏览。
 
+上传分为新建和更新：新建是第一次上传、生成新链接；更新是给已有链接上传新版本（同一路径再次上传、`--id`、模板重新渲染）。改访问码、分类、简介或删除历史版本都不算更新。页面上的上传数是两者合计，并分别列出。
+
 - **累计上传与当前存量分开计算**：成功上传计数一次；文件删除后，上传历史继续保留，当前文件数和占用空间减少。访问码变更不产生上传事件。
 - **时间范围**影响累计上传、趋势、类型/来源分布和活动；当前存量不受日期范围影响。月历按所显示月份统计，并共享来源/类型筛选。
 - **历史覆盖**：首次启用按现存文件的创建时间回填，此前已删除的文件无法恢复。页面显示开始记录时间、历史可能不完整的提示，以及无效元数据的跳过数量；无上传日期显示 0，未来日期不可选。
@@ -279,6 +281,7 @@ statistics:
 - `GET /admin/api/statistics?range=30&month=2026-10&source=&type=`：`range` 为 `7`、`30`、`month`；也可显式指定 `from` / `to`（`YYYY-MM-DD`，含首尾，最多 366 天），显式日期优先。`month` 控制月历，默认当月；日期不能位于未来。`source` 为上传来源，`type` 为 `html` / `image` / `video`。
 - 汇总响应包含 `timezone`、`asOf`、`today`、`filters`、`coverage`、`summary`、`daily`、`calendar`、`types`、`sources`、`availableSources`、`activities`、`deletionActivities`。`coverage.startedAt` 是记录起点，`completeFromDate` 是其下一自然日，`periodComplete` 表示所选范围是否位于完整记录期且未混入回填记录。
 - `GET /admin/api/statistics/day?date=2026-10-12&page=1&pageSize=20`：支持相同来源/类型筛选，`pageSize` 最大 100。响应包含 `count`、`bytes`、`retainedCount`、`items` 和分页信息；已删除项 `retained: false`、`filename: null`。
+- 新建和更新：上述 `count`、`bytes` 是新建与更新的合计。汇总里的 `summary.today`、`summary.uploads`、`daily`、`calendar.days`、`types`、`sources`、`projects` 以及当日接口都另有 `created`、`updated`（各含 `count`、`bytes`；未来日期为 `null`）。`activities` 和当日 `items` 的上传行带 `uploadKind`（`create` / `update`）和 `version`（新建为 1）。`coverage.backfilledUpdates` 是上线时从保留版本回填的更新条数，`coverage.skippedVersions` 是因版本记录无效而跳过的条数。`summary.current`（当前存量）不区分新建和更新。
 
 - `GET /admin/api/statistics/visits?from=2026-09-19&to=2026-10-18&project=&source=&type=`：访问统计。`project` 传 `-` 表示未设置项目（上传统计接口同样支持 `project`）。响应包含 `totals`（`views`、`admin_views`、`bots`、`challenges`、`unlock_ok`、`unlock_fail`、`rate_limited`、`expired_hits`）、`daily`、`top`、`projects`、`neverViewed`、`viewedInRange`、`current`、`accessStatus` 和 `startedAt`。
 
