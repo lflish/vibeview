@@ -206,6 +206,10 @@ async function scenario(proxy, browserMode) {
   // ---- 管理员：列表与全局开关 ----
   const login = await request(base + '/admin/login', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ user: 'test', password: 'test-password' }) });
   const admin = login.headers.get('set-cookie').split(';')[0];
+  // 带 id 的模板渲染生成了新版本（上面“补充加急费”那次），统计里记为更新（docs/changes/2026-11-09-stats-create-vs-update R1.3）
+  const statistics = await (await request(base + '/admin/api/statistics', { headers: { cookie: admin } })).json();
+  assert.ok(statistics.summary.uploads.updated.count >= 1, 'template render with id counts as an update');
+  assert.ok(statistics.activities.some((a) => a.id === id && a.uploadKind === 'update' && a.version === 2), 'the rendered version is listed as an update');
   const all = await (await request(base + '/admin/api/templates', { headers: { cookie: admin } })).json();
   const vb = all.templates.find((t) => t.name === 'vendor-bill');
   assert.ok(vb.global); assert.ok(all.templates.some((t) => t.name === 'prd-review' && !t.global));
