@@ -43,7 +43,7 @@
 ## 任务
 
 ### T1 记录更新事件、恢复和回填
-- 状态：待办
+- 状态：完成
 - 文件：修改 `lib/statistics-store.js`；测试 `scripts/test-statistics.js`
 - 接口：
   - 使用：`versions.list(meta)`、`versions.find(meta, 1)`（`lib/versions.js`，现有，不依赖 config）；现有 `atomic`、`finalize` 的做法
@@ -74,7 +74,7 @@
 - 依赖：无
 
 ### T2 聚合和接口字段
-- 状态：待办
+- 状态：完成
 - 文件：修改 `lib/statistics-store.js`（`aggregate`、`details`、`context`、`summary`、`day`、`filter`）；测试 `scripts/test-statistics.js`
 - 接口：
   - 提供：design.md 4.2、4.3 的字段：所有聚合对象加 `created`、`updated`；`count`/`bytes` 为合计；`activities`、`deletionActivities`、`day.items` 加 `uploadKind`、`version`；`day` 加 `created`、`updated`；未来日期这两项为 `null`
@@ -91,7 +91,7 @@
 - 依赖：T1
 
 ### T3 集成测试：真实上传路径
-- 状态：待办
+- 状态：进行中
 - 文件：新建 `scripts/test-statistics-updates.js`（独立的服务实例和临时目录，写法照 `scripts/test-statistics-integration.js`）；修改 `package.json` 的 `test:statistics`，把它加在 `test-statistics-integration.js` 之后；修改 `scripts/test-templates.js`（只加 R1.3 的断言）；如测试暴露问题，修改 `lib/statistics-store.js` 或 `server.js`。现有 `test-statistics-integration.js` 不改（它写死的 19 / 21 / 16 等期望值不受影响）
 - 接口：使用现有 `upload()`、`request()`、`auth()`、`summary()`；新增 `uploadUpdate(id, name, token)`：`FormData` 带 `id` 字段
 - 场景：R1.1、R1.2、R1.3、R1.4、R1.5、R1.6、R2.2、R4.1、R5.1、并发更新
@@ -141,6 +141,8 @@
 
 | 任务 | 完成时间 | 提交 | 测试 |
 |------|----------|------|------|
+| T1 | 2026-11-09 04:01 | 89fd83e | test:statistics 通过；npm test 通过（smoke 81/81） |
+| T2 | 2026-11-09 04:01 | 89fd83e | 同上（和 T1 同一提交，decisions #13） |
 
 ## 后续
 
