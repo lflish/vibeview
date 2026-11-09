@@ -39,6 +39,6 @@
 | [home-intro.md](./home-intro.md) | 已实现（v1.4.3） | 首页和 README 介绍版本、模板和模板 skill |
 | [template-admin.md](./template-admin.md) | 已实现（v1.4.4） | 管理端模板页、资源按模板筛选和导出 |
 | [review-comments.md](./review-comments.md) | 草案 | 需求评审：页面批注、多角色评论、确认签字 |
-| [stats-create-vs-update](../changes/2026-11-09-stats-create-vs-update/spec.md) | 草案（devflow） | 统计页区分新建和更新 |
+| [stats-create-vs-update](../changes/2026-11-09-stats-create-vs-update/spec.md) | 已确认（devflow） | 统计页区分新建和更新 |
 
 实现顺序：resource-versions → page-templates（模板核心、导出）→ 模板配套 skill → 模板管理页 → review-comments。

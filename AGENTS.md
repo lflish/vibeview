@@ -6,6 +6,10 @@ Feature requirements live in [docs/specs/](docs/specs/README.md), one file per f
 When a requirement changes, update its spec first, then implement against it. Only start implementing a
 spec whose status is “已确认” or later; record scope changes under its 变更记录.
 
+New requirements follow devflow (config in `.devflow.yml`): each change gets a folder under
+[docs/changes/](docs/changes/README.md), with a link row added to the `docs/specs/` index. Existing
+`docs/specs/*.md` files stay where they are and are not migrated.
+
 ## Release and deployment skills
 
 - [release](.agents/skills/release/SKILL.md): cut a version — checks, version bump, bilingual notes,
