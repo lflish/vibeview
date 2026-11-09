@@ -31,32 +31,23 @@ code{background:#f1f5f9;border-radius:4px;padding:1px 5px;font-size:12px}
   <h1>统计页区分新建和更新</h1>
   <p class="sub">vibeview · 第一次用 devflow 跑的需求 · 等级 L1 · 更新于 2026-11-09</p>
 
-  <div class="status"><span class="pill ok">独立验证通过（有备注）</span><span class="pill wait">等你：C、c4、d2</span></div>
+  <div class="status"><span class="pill ok">验证通过 · CI 通过</span><span class="pill wait">等你：确认合并 PR #3</span></div>
 
   <div class="steps">
-    <div class="step done"><b>需求 ✓</b>关口 A 通过</div>
-    <div class="step done"><b>设计 ✓</b>关口 B 通过</div>
-    <div class="step done"><b>开发 ✓</b>5 个任务，评审修 1 处</div>
-    <div class="step now"><b>测试</b>关口 C 通过，等你看</div>
-    <div class="step"><b>发布</b>合并、上生产要你确认</div>
+    <div class="step done"><b>需求 ✓</b>关口 A</div>
+    <div class="step done"><b>设计 ✓</b>关口 B</div>
+    <div class="step done"><b>开发 ✓</b>7 个任务（含 2 个返工）</div>
+    <div class="step done"><b>测试 ✓</b>关口 C，复验 2 轮</div>
+    <div class="step now"><b>发布</b>等你确认合并</div>
   </div>
 
   <section class="card">
-    <h2>等你决定（3 件）</h2>
+    <h2>等你决定（1 件）</h2>
     <div class="decision">
-      <h3>C. 验收通过，可以进入发布阶段吗？</h3>
-      <p>所有验收场景都有自动化测试并通过；验证者还模拟了一次真实升级：用旧代码造的数据在新代码上启动，历史更新被正确补记。发布阶段我会先推送分支、开 PR；合并和上生产都会再问你。</p>
-      <p class="rec">推荐：进入发布</p>
-    </div>
-    <div class="decision">
-      <h3>c4. 新增的 verify-vibeview skill 可以留在仓库里吗？</h3>
-      <p>在 <code>.agents/skills/verify-vibeview/</code>：教以后的 agent 怎么启动一个隔离的 vibeview 实例、体检、操作、看日志、清理，附 3 个功能说明。已经完整跑通一次（顺带修了启动脚本的一个挂起问题）。它属于约束 AI 的文件，所以要你同意。</p>
-      <p class="rec">推荐：同意</p>
-    </div>
-    <div class="decision">
-      <h3>d2. 深色主题下“更新”标签太亮，现在顺手改吗？</h3>
-      <p>改 1 行样式，让标签跟随主题颜色；改完要再派一个验证者复验（约 5 分钟）。不改也不影响功能。</p>
-      <p class="rec">推荐：现在改</p>
+      <h3>合并 PR #3 吗？</h3>
+      <p>远程 main 的历史被改写过（作者改成 lflish），还新增了 3 个提交（上传和管理端加固等）。我把本需求的提交变基到新 main 上，开了新的 PR #3（旧 PR #2 已关闭，没有强推）。变基后独立复验通过，CI 两项都通过，GitHub 显示可以合并。</p>
+      <p>合并方式：squash，main 上只多一个提交。合并不会自动部署；发布 v1.4.5 和上生产会再单独列清单问你。</p>
+      <p class="rec">推荐：合并</p>
     </div>
   </section>
 
@@ -107,7 +98,9 @@ code{background:#f1f5f9;border-radius:4px;padding:1px 5px;font-size:12px}
   <section class="card">
     <h2>历史</h2>
     <ul>
-      <li>2026-11-09 机器关口 C 通过（有备注），等你看</li>
+      <li>2026-11-09 变基到改写后的 main，PR #3 复验和 CI 通过，等你确认合并</li>
+      <li>2026-11-09 按你的回复修了深色标签和对比度，复验通过</li>
+      <li>2026-11-09 机器关口 C 通过（有备注）</li>
       <li>2026-11-09 开发完成：5 个任务，代码评审修 1 处</li>
       <li>2026-11-09 机器关口 B 通过（有备注），等你看</li>
       <li>2026-11-09 关口 A 通过</li>
