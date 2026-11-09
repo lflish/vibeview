@@ -29,7 +29,8 @@ test:
   cloud_browser: forbidden     # 管理端和预览页可能含用户内容，不经过云浏览器
 
 human_decisions:
-  - 首页、README、用户指南里的对外文案
+  - 首页和 README 开头的产品介绍（定位、口吻）
+  # 用户指南、API 说明、README 里的用法跟着功能一起改，不在这里
   - 配额、保留天数、访问码有效期这类默认值
   - 上传 CLI 和 HTTP 接口的不兼容改动
 
@@ -54,4 +55,4 @@ release:
   tag_prefix: v
   publish: "使用 $release 发布 {version}"
   production: "使用 $deploy-view 部署 {tag}"
-  post_check: "打开线上首页，确认版本号是 {version}；管理统计页能正常加载"
+  post_check: "读部署记录（RELEASE）和 package.json 确认运行的是 {version}；/healthz 正常；管理统计页能正常加载"   # 首页不显示版本号
