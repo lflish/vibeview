@@ -10,6 +10,7 @@
 | R1.1 | 集成 | `R1.1 --id 更新记一次` | HTTP 上传后带 `id` 再传：`today.updated.count` 1、`created.count` 不变 | T3 |
 | T4 | 2026-11-09 04:05 | a0746b1 | npm run test:browser 通过（含统计页 390/768/1440 无横向滚动）；带更新数据的截图检查无报错 |
 | T5 | 2026-11-09 04:06 | 30b6ebb | 两份指南都有新建/更新定义和新字段（grep uploadKind 各 1 处） |
+| T6 | 2026-11-09 04:55 | aa70074 | 新断言先失败后通过；npm run test:browser、npm test 通过 |
 | R1.2 | 集成 | `R1.2 站点更新` | 站点 zip 更新：`types` 里 site 的 `updated.count` 1，`bytes` = 新版本解压大小 | T3 |
 | R1.3 | 集成 | `R1.3 模板渲染生成新版本` | `scripts/test-templates.js` 第 171 行附近带 `id` 渲染之后，管理员统计 `summary.uploads.updated.count` ≥ 1 | T3 |
 | R1.4 | 集成 | `R1.4 被拒的更新不计` | 类型不一致 400、他人资源 403、超配额 429 后，`created`、`updated` 都不变 | T3 |
@@ -140,6 +141,14 @@
 - 完成定义：两份指南都写了“新建 / 更新”的定义和新字段；`grep -n "uploadKind" docs/user-guide.*.md` 两份都有
 - 依赖：T2；c2
 
+### T6 返工：深色主题下“更新”标签跟随主题
+- 状态：完成
+- 来源：用户，d2 改为“现在改”（独立验证备注 N3）
+- 文件：修改 `views/statistics.html`（`.kind-tag.update` 的颜色）；测试 `scripts/test-statistics-updates.js` 的浏览器部分
+- 测试：`R3 dark kind tag`：切到深色主题后，当日明细里 `.kind-tag.update` 的背景亮度低于 0.35（相对亮度），浅色主题下高于 0.8
+- 完成定义：`node scripts/test-statistics-updates.js --browser` 通过；`npm run test:browser` 通过
+- 依赖：无
+
 ## 进度
 
 | 任务 | 完成时间 | 提交 | 测试 |
@@ -153,4 +162,4 @@
 - X1 统计页类型筛选下拉框缺“站点”选项（之前就有，测试阶段探索发现，和本需求无关）
 - N1 当日明细的更新行显示资源当前的文件名，不是那个版本上传时的文件名（独立验证备注）
 - N2 历史版本被删除后，它的更新记录仍显示“保留中”（独立验证备注）
-- N3 深色主题下“更新”标签用了写死的浅色背景，比较刺眼（独立验证备注；见汇总 d2）
+- ~~N3 深色主题下“更新”标签太亮~~（已在 T6 修复）
