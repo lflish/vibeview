@@ -215,15 +215,16 @@ async function run() {
 
       // 深色主题下同样可读
       // 深色主题下“更新”标签跟随主题（d2 / N3）：背景要暗，浅色主题下要亮
-      const tagLuminance = () => page.locator('#day-list .kind-tag.update').first().evaluate(el => {
-        const c = getComputedStyle(el).backgroundColor, m = c.match(/[\d.]+/g).map(Number);
-        const rgb = c.startsWith('color(srgb') ? m.slice(0, 3) : m.slice(0, 3).map(v => v / 255);
-        const lin = v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-        return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
+      // 文字和背景的对比度不低于 4.5（WCAG AA）
+      const tagColors = () => page.locator('#day-list .kind-tag.update').first().evaluate(el => {
+        const luminance = c => { const m = c.match(/[\d.]+/g).map(Number); const rgb = c.startsWith('color(srgb') ? m.slice(0, 3) : m.slice(0, 3).map(v => v / 255);
+          const lin = v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]); };
+        const style = getComputedStyle(el), bg = luminance(style.backgroundColor), fg = luminance(style.color);
+        return { bg, contrast: (Math.max(bg, fg) + 0.05) / (Math.min(bg, fg) + 0.05) };
       });
-      assert.ok(await tagLuminance() > 0.8, 'light theme update tag is light');
+      let tag = await tagColors(); assert.ok(tag.bg > 0.8, 'light theme update tag is light'); assert.ok(tag.contrast >= 4.5, 'light contrast ' + tag.contrast.toFixed(2));
       await page.locator('#theme-select').selectOption('dark'); await page.waitForTimeout(80);
-      assert.ok(await tagLuminance() < 0.35, 'dark theme update tag is dark');
+      tag = await tagColors(); assert.ok(tag.bg < 0.35, 'dark theme update tag is dark'); assert.ok(tag.contrast >= 4.5, 'dark contrast ' + tag.contrast.toFixed(2));
       await evidence(page, 'R3-dark'); await page.locator('#theme-select').selectOption('light');
       assert.deepEqual(errors, []);
       console.log('statistics updates browser: cards, stacked trend, calendar/day/dialog tags, activities, breakdowns, empty-update filter, definitions, responsive layout passed');
