@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>统计区分新建和更新 · 效果示意</title>
+<style>
+:root{--bg:#f6f8fb;--panel:#fff;--line:#e2e8f0;--text:#1e293b;--muted:#64748b;--blue:#2563eb;--soft:#eaf1ff;--upd:#f59e0b;--updsoft:#fef3e2;--green:#0d9488;--purple:#8b5cf6;--radius:14px}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}
+h1,h2,h3,p{margin:0}button{font:inherit;cursor:pointer;color:inherit}
+.demo{background:#fff8ec;color:#99601a;border-bottom:1px solid #f4e3c5;font-size:12px;padding:8px 16px;text-align:center}
+.content{max-width:1180px;margin:auto;padding:24px 16px 40px}
+.head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+.eyebrow{font-size:10px;color:var(--blue);letter-spacing:1.5px;font-weight:650}h1{font-size:26px;font-weight:720;letter-spacing:-.6px}
+.head p{font-size:12px;color:var(--muted)}
+.seg{display:inline-flex;background:#eef2f7;border-radius:8px;padding:3px;gap:2px;flex-wrap:wrap}.seg button{border:0;background:transparent;border-radius:6px;padding:5px 10px;font-size:12px;color:var(--muted)}.seg button[aria-pressed=true]{background:#fff;color:var(--blue);box-shadow:0 1px 2px #0001;font-weight:600}
+.scen{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:16px}
+.metric{padding:16px 18px}.metric .label{font-size:12px;color:var(--muted)}.metric .value{font-size:30px;font-weight:690;letter-spacing:-1px;margin:6px 0 4px}.metric .value small{font-size:11px;font-weight:400;color:#94a3b8;margin-left:4px}
+.split{display:flex;gap:10px;font-size:11px;color:var(--muted);flex-wrap:wrap}.split b{font-weight:600;color:var(--text)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:0}.dot.new{background:var(--blue)}.dot.upd{background:var(--upd)}
+.grid2{display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:16px;margin-bottom:16px}
+.panel{padding:18px 20px}.ph{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}h2{font-size:15px;font-weight:650}.cap{font-size:11px;color:var(--muted)}
+.legend{display:flex;gap:14px;font-size:11px;color:var(--muted)}
+svg.chart{width:100%;height:auto;display:block}.bar{cursor:pointer}.bar:focus{outline:none}.bar:focus rect,.bar:hover rect{opacity:.8}
+.hover{font-size:12px;color:var(--muted);min-height:20px;margin-top:6px}
+.types .row,.rank .row{display:grid;grid-template-columns:70px 1fr 64px;gap:10px;align-items:center;margin:12px 0;font-size:12px}
+.track{height:8px;background:#eef2f7;border-radius:4px;overflow:hidden;display:flex}.track i{display:block;height:100%}.track i.new{background:var(--blue)}.track i.upd{background:var(--upd)}
+.num{text-align:right;font-variant-numeric:tabular-nums}.num small{display:block;font-size:10px;color:var(--muted)}
+.cal{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr)}.calarea{padding:0 20px 16px}.wk,.days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}.wk{font-size:10px;color:#94a3b8;margin-bottom:6px}
+.day{border:1px solid transparent;border-radius:7px;min-height:56px;padding:6px 8px;text-align:left;background:#f6f8fb;color:#64748b;display:flex;flex-direction:column;justify-content:space-between}.day b{font-size:15px;color:var(--text)}.day small{font-size:9px}.day.sel{outline:2px solid var(--blue);outline-offset:-2px}.day.out{background:transparent;cursor:default}.day .mini{display:flex;height:3px;border-radius:2px;overflow:hidden;background:#e2e8f0}.day .mini i.new{background:var(--blue)}.day .mini i.upd{background:var(--upd)}
+.detail{border-left:1px solid var(--line);padding:16px 20px;background:#fbfcfe}.detail h3{font-size:14px}
+.dsum{display:flex;gap:20px;padding:10px 0;border-bottom:1px solid var(--line)}.dsum strong{display:block;font-size:20px}.dsum small{font-size:10px;color:var(--muted)}
+ul{list-style:none;margin:0;padding:0}.file{display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid #edf1f6;font-size:12px}.file .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.file .gone{color:#94a3b8;font-style:italic}
+.tag{font-size:10px;border-radius:4px;padding:1px 6px;white-space:nowrap}.tag.new{background:var(--soft);color:var(--blue)}.tag.upd{background:var(--updsoft);color:#b45309}.tag.del{background:#f1f5f9;color:#64748b}
+.time{font-size:10px;color:#94a3b8;white-space:nowrap}
+.empty{padding:18px 0;text-align:center;color:var(--muted);font-size:12px}
+.def{margin-top:16px}.def dl{display:grid;grid-template-columns:110px 1fr;gap:8px 14px;font-size:12px;margin:8px 0 0}.def dt{font-weight:600}.def dd{margin:0;color:var(--muted)}.def .new-tag{color:#b45309;font-size:10px;margin-left:4px}
+.foot{margin-top:18px;font-size:11px;color:var(--muted)}
+@media(max-width:860px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2,.cal{grid-template-columns:1fr}.detail{border-left:0;border-top:1px solid var(--line)}}
+@media(max-width:420px){.metric .value{font-size:24px}.day{min-height:46px;padding:4px 5px}.day b{font-size:13px}.def dl{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="demo">效果示意，非最终实现 · 需求：统计页区分新建和更新（数据是假的）</div>
+<main class="content">
+  <div class="head">
+    <div><div class="eyebrow">ANALYTICS</div><h1>统计总览</h1><p>“上传”= 新建 + 更新（上传了新版本）。蓝色是新建，橙色是更新。</p></div>
+    <div class="scen">看场景：<div class="seg" role="group" aria-label="场景">
+      <button data-s="normal" aria-pressed="true">有更新（R3.1–R3.5）</button>
+      <button data-s="none" aria-pressed="false">没有更新（R3.7）</button>
+    </div></div>
+  </div>
+
+  <section class="metrics" aria-label="概览">
+    <div class="card metric"><div class="label">今日上传</div><div class="value" id="m-today"></div><div class="split" id="s-today"></div></div>
+    <div class="card metric"><div class="label">近 30 天上传</div><div class="value" id="m-range"></div><div class="split" id="s-range"></div></div>
+    <div class="card metric"><div class="label">当前文件数</div><div class="value">46<small>个</small></div><div class="split">仍保留的文件 · 更新不增加文件数</div></div>
+    <div class="card metric"><div class="label">期间删除</div><div class="value">4<small>个</small></div><div class="split">删除不减少历史新建和更新</div></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card panel">
+      <div class="ph"><div><h2>每日上传趋势</h2><p class="cap">每天的柱子分成新建和更新两段</p></div>
+        <div class="seg" role="group" aria-label="指标"><button data-m="count" aria-pressed="true">文件数</button><button data-m="bytes" aria-pressed="false">上传体积</button></div></div>
+      <div class="legend"><span><i class="dot new"></i>新建</span><span><i class="dot upd"></i>更新</span></div>
+      <svg class="chart" id="chart" viewBox="0 0 740 210" role="group" aria-label="每日上传趋势"></svg>
+      <div class="hover" id="hover" aria-live="polite">悬停或聚焦柱子，查看当天新建和更新各多少</div>
+    </section>
+    <section class="card panel types">
+      <div class="ph"><div><h2>文件类型分布</h2><p class="cap">所选范围 · 合计（新建 / 更新）</p></div></div>
+      <div id="types"></div>
+    </section>
+  </div>
+
+  <section class="card cal" aria-label="上传日历">
+    <div>
+      <div class="ph" style="padding:18px 20px 0"><div><h2>上传日历</h2><p class="cap">格子里是合计，底部细条是新建和更新的比例</p></div><span class="cap" id="mtotal"></span></div>
+      <div class="calarea"><div class="wk"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div><div class="days" id="days"></div></div>
+    </div>
+    <aside class="detail">
+      <h3 id="dtitle"></h3>
+      <div class="dsum"><div><strong id="dn"></strong><small>新建</small></div><div><strong id="du"></strong><small>更新</small></div><div><strong id="db"></strong><small>上传体积</small></div></div>
+      <ul id="dlist"></ul>
+      <p class="cap" style="margin-top:8px">更新行标出版本号；已删除的资源隐藏文件名（R1.6）</p>
+    </aside>
+  </section>
+
+  <div class="grid2" style="margin-top:16px">
+    <section class="card panel rank">
+      <div class="ph"><div><h2>按项目 · 上传来源</h2><p class="cap">合计，条形按新建和更新分段（E2）</p></div></div>
+      <div id="rank"></div>
+    </section>
+    <section class="card panel">
+      <div class="ph"><div><h2>最近活动</h2><p class="cap">回填的历史事件不作为新活动</p></div></div>
+      <ul id="acts"></ul>
+    </section>
+  </div>
+
+  <section class="card panel def">
+    <h2>统计口径（新增部分）</h2>
+    <dl>
+      <dt>新建<span class="new-tag">改名</span></dt><dd>第一次上传，生成一个新链接。原来的“上传”指的就是它。</dd>
+      <dt>更新<span class="new-tag">新增</span></dt><dd>给已有链接上传新版本（同一路径再次上传、--id、模板重新渲染）。改访问码、分类、简介，删除历史版本，都不算。</dd>
+      <dt>上传</dt><dd>新建 + 更新。删除资源或历史版本后，已记下的新建和更新都不减少。</dd>
+      <dt>历史更新</dt><dd>上线时从资源保留的版本回填；被保留上限清理掉的版本、上线前已删除资源的更新无法还原。</dd>
+    </dl>
+  </section>
+  <p class="foot">在终端回复关口 A 即可，这一页不需要操作。</p>
+</main>
+<script>
+(function(){
+  var scen='normal', metric='count', sel=null;
+  // 假数据：近 30 天
+  var seed=7; function rnd(){seed=(seed*9301+49297)%233280;return seed/233280;}
+  var days=[]; var today=new Date('2026-11-09T12:00:00');
+  for(var i=29;i>=0;i--){var d=new Date(today-i*864e5);var n=Math.round(rnd()*3);var u=rnd()<.55?Math.round(rnd()*4):0;days.push({date:d.toISOString().slice(0,10),n:n,u:u,nb:n*(120+rnd()*900),ub:u*(80+rnd()*700)});}
+  days[29].n=2;days[29].u=3;
+  var files=['产品需求-评论.html','季度报告/','原型-登录页.html','截图-首页.png','发布说明.html','架构图.html'];
+  function $(id){return document.getElementById(id);}
+  function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e;}
+  function kb(b){return b>1024?(b/1024).toFixed(1)+' MB':Math.round(b)+' KB';}
+  function data(){return days.map(function(d){return scen==='none'?{date:d.date,n:d.n,u:0,nb:d.nb,ub:0}:d;});}
+  function split(id,n,u){var s=$(id);s.replaceChildren();var a=el('span');a.innerHTML='<i class="dot new"></i>新建 <b>'+n+'</b>';var b=el('span');b.innerHTML='<i class="dot upd"></i>更新 <b>'+u+'</b>';s.append(a,b);}
+  function render(){
+    var D=data(), t=D[29], N=0,U=0; D.forEach(function(d){N+=d.n;U+=d.u;});
+    $('m-today').innerHTML=(t.n+t.u)+'<small>个</small>'; split('s-today',t.n,t.u);
+    $('m-range').innerHTML=(N+U)+'<small>个</small>'; split('s-range',N,U);
+    // 趋势
+    var svg=$('chart'); svg.replaceChildren(); var ns='http://www.w3.org/2000/svg';
+    var val=function(d,k){return metric==='count'?d[k]:d[k+'b'];};
+    var max=Math.max.apply(null,D.map(function(d){return val(d,'n')+val(d,'u');}))||1, w=740/30, H=180;
+    D.forEach(function(d,i){
+      var g=document.createElementNS(ns,'g'); g.setAttribute('class','bar'); g.setAttribute('tabindex','0'); g.setAttribute('role','button');
+      var hn=val(d,'n')/max*H, hu=val(d,'u')/max*H, x=i*w+w*.18, bw=w*.64;
+      function r(y,h,c){var e=document.createElementNS(ns,'rect');e.setAttribute('x',x);e.setAttribute('y',y);e.setAttribute('width',bw);e.setAttribute('height',Math.max(h,0));e.setAttribute('fill',c);e.setAttribute('rx',2);g.appendChild(e);}
+      r(H-hn,hn,'#2563eb'); r(H-hn-hu,hu,'#f59e0b'); if(!hn&&!hu)r(H-2,2,'#dbe3ef');
+      var txt=d.date.slice(5)+' · 新建 '+d.n+' · 更新 '+d.u+(metric==='bytes'?' · '+kb(d.nb+d.ub):'');
+      g.setAttribute('aria-label',txt);
+      var show=function(){$('hover').textContent=txt;}; g.addEventListener('mouseenter',show); g.addEventListener('focus',show); g.addEventListener('click',function(){sel=d.date;renderCal();});
+      svg.appendChild(g);
+      if(i%5===4||i===29){var l=document.createElementNS(ns,'text');l.setAttribute('x',i===29?x+bw:x);if(i===29)l.setAttribute('text-anchor','end');l.setAttribute('y',202);l.setAttribute('font-size','11');l.setAttribute('fill','#94a3b8');l.textContent=d.date.slice(5);svg.appendChild(l);}
+    });
+    // 类型
+    var types=[['HTML',.6],['站点',.2],['图片',.15],['视频',.05]], T=$('types'); T.replaceChildren();
+    types.forEach(function(p){var n=Math.round(N*p[1]),u=Math.round(U*p[1]*(p[0]==='图片'?.3:1.2));var row=el('div','row');row.append(el('span','',p[0]));var tr=el('div','track');var a=el('i','new');a.style.width=(n/(N+U)*100)+'%';var b=el('i','upd');b.style.width=(u/(N+U)*100)+'%';tr.append(a,b);row.append(tr);var nm=el('div','num',String(n+u));nm.appendChild(el('small','',n+' / '+u));row.append(nm);T.appendChild(row);});
+    // 排行
+    var R=$('rank'); R.replaceChildren(); [['vibeview',.45,.7],['devflow',.3,.25],['alice',.15,.05],['未设置',.1,0]].forEach(function(p){var n=Math.round(N*p[1]),u=Math.round(U*p[2]);var row=el('div','row');row.append(el('span','',p[0]));var tr=el('div','track');var a=el('i','new');a.style.width=(n/(N+U)*100)+'%';var b=el('i','upd');b.style.width=(u/(N+U)*100)+'%';tr.append(a,b);row.append(tr);var nm=el('div','num',String(n+u));nm.appendChild(el('small','',n+' / '+u));row.append(nm);R.appendChild(row);});
+    // 活动
+    var A=$('acts'); A.replaceChildren();
+    var acts=scen==='none'?[['new','新建 · HTML','alice · 12 KB','10:42'],['del','管理员删除 · 图片','alice · 340 KB','09:15'],['new','新建 · 站点','codex · 1.2 MB','昨天']]
+      :[['upd','更新 v4 · HTML','claude · 18 KB','10:58'],['upd','更新 v3 · HTML','claude · 17 KB','10:31'],['new','新建 · HTML','alice · 12 KB','10:02'],['del','管理员删除 · 图片','alice · 340 KB','09:15']];
+    acts.forEach(function(a){var li=el('li','file');li.append(el('span','tag '+a[0],a[0]==='new'?'新建':a[0]==='upd'?'更新':'删除'));var nm=el('span','nm',a[1]);var s=el('div','');s.style.cssText='flex:1;min-width:0';s.append(nm,el('div','time',a[2]));li.append(s,el('span','time',a[3]));A.appendChild(li);});
+    renderCal();
+  }
+  function renderCal(){
+    var D=data(), map={}; D.forEach(function(d){map[d.date]=d;}); if(!sel)sel=D[29].date;
+    var box=$('days'); box.replaceChildren(); var first=new Date('2026-11-01T12:00:00'), lead=(first.getDay()+6)%7, M=0;
+    for(var k=0;k<lead;k++)box.appendChild(el('span','day out'));
+    for(var dd=1;dd<=30;dd++){var key='2026-11-'+String(dd).padStart(2,'0'), d=map[key], fut=dd>9;
+      var b=el('button','day'+(key===sel?' sel':'')); b.type='button';
+      if(fut){b.disabled=true;b.style.opacity=.45;b.append(el('small','',String(dd)));box.appendChild(b);continue;}
+      var tot=d?d.n+d.u:0; M+=tot; b.append(el('small','',String(dd)),el('b','',String(tot)));
+      var mini=el('div','mini'); if(tot){var a=el('i','new');a.style.width=(d.n/tot*100)+'%';var c=el('i','upd');c.style.width=(d.u/tot*100)+'%';mini.append(a,c);} b.appendChild(mini);
+      b.setAttribute('aria-label',key+' 新建 '+(d?d.n:0)+' 更新 '+(d?d.u:0)); b.addEventListener('click',(function(x){return function(){sel=x;renderCal();};})(key)); box.appendChild(b);}
+    $('mtotal').textContent='本月上传 '+M+' 个';
+    var d=map[sel]||{n:0,u:0,nb:0,ub:0}; $('dtitle').textContent=sel.replace(/-/g,' / '); $('dn').textContent=d.n; $('du').textContent=d.u; $('db').textContent=kb(d.nb+d.ub);
+    var L=$('dlist'); L.replaceChildren(); if(!d.n&&!d.u){L.appendChild(el('li','empty','这一天没有新建或更新。'));return;}
+    var rows=[]; for(var i=0;i<d.u;i++)rows.push(['upd','更新 · v'+(i+2),files[i%files.length], i===1]); for(var j=0;j<d.n;j++)rows.push(['new','新建',files[(j+3)%files.length],false]);
+    rows.slice(0,6).forEach(function(r,idx){var li=el('li','file');li.append(el('span','tag '+r[0],r[1]));var nm=el('span','nm'+(r[3]?' gone':''),r[3]?'已删除':r[2]);li.append(nm,el('span','time',(10+idx)+':'+(10+idx*7)));L.appendChild(li);});
+  }
+  document.querySelectorAll('[data-s]').forEach(function(b){b.addEventListener('click',function(){scen=b.dataset.s;document.querySelectorAll('[data-s]').forEach(function(x){x.setAttribute('aria-pressed',String(x===b));});render();});});
+  document.querySelectorAll('[data-m]').forEach(function(b){b.addEventListener('click',function(){metric=b.dataset.m;document.querySelectorAll('[data-m]').forEach(function(x){x.setAttribute('aria-pressed',String(x===b));});render();});});
+  render();
+})();
+</script>
+</body>
+</html>
