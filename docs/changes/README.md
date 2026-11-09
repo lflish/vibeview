@@ -4,4 +4,4 @@ devflow 的需求文件夹。旧的功能 spec 在 [../specs/](../specs/README.m
 
 | 需求 | 状态 | 等级 | 规模 | 说明 | 等你的事 | 更新 |
 |------|------|------|------|------|----------|------|
-| [2026-11-09-stats-create-vs-update](2026-11-09-stats-create-vs-update/spec.md) | 已验证 | L1 | 标准 | 统计页区分新建和更新 | 合并 | 2026-11-09 |
+| [2026-11-09-stats-create-vs-update](2026-11-09-stats-create-vs-update/spec.md) | 已合并 | L1 | 标准 | 统计页区分新建和更新 | 上生产 | 2026-11-09 |
