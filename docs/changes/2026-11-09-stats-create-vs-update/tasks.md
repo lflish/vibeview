@@ -8,6 +8,7 @@
 |------|------|--------|------|------|
 | R1.1 | 单元 | `update_live_version_counts_once` | 资源 v1 → 写入 v2：`summary.uploads` 合计 +1，`updated.count` 1，`updated.bytes` = v2 size | T1 |
 | R1.1 | 集成 | `R1.1 --id 更新记一次` | HTTP 上传后带 `id` 再传：`today.updated.count` 1、`created.count` 不变 | T3 |
+| T4 | 2026-11-09 04:05 | a0746b1 | npm run test:browser 通过（含统计页 390/768/1440 无横向滚动）；带更新数据的截图检查无报错 |
 | R1.2 | 集成 | `R1.2 站点更新` | 站点 zip 更新：`types` 里 site 的 `updated.count` 1，`bytes` = 新版本解压大小 | T3 |
 | R1.3 | 集成 | `R1.3 模板渲染生成新版本` | `scripts/test-templates.js` 第 171 行附近带 `id` 渲染之后，管理员统计 `summary.uploads.updated.count` ≥ 1 | T3 |
 | R1.4 | 集成 | `R1.4 被拒的更新不计` | 类型不一致 400、他人资源 403、超配额 429 后，`created`、`updated` 都不变 | T3 |
@@ -112,7 +113,7 @@
 - 依赖：T2
 
 ### T4 统计页区分新建和更新
-- 状态：进行中
+- 状态：完成
 - 文件：修改 `views/statistics.html`
 - 接口：使用 T2 的字段
 - 场景：R3.1–R3.8（浏览器测试由 dev-test 写）
@@ -130,7 +131,7 @@
 - 依赖：T2
 
 ### T5 文档
-- 状态：待办（c2 已同意，按建议稿写）
+- 状态：进行中
 - 文件：修改 `docs/user-guide.zh-CN.md`、`docs/user-guide.en.md` 的“管理统计”一节（第 247–254 行）和接口说明（第 279–281 行）；`docs/specs/resource-versions.md` 验收里被划掉的“统计里，更新记为一次上传事件”一行，加一句“已在 docs/changes/2026-11-09-stats-create-vs-update 实现”
 - 内容（建议稿，见汇总 c2）：
   - 中文：在“管理统计”第一段后加一句：“上传分为新建和更新：新建是第一次上传、生成新链接；更新是给已有链接上传新版本（同一路径再次上传、`--id`、模板重新渲染）。改访问码、分类、简介或删除历史版本都不算更新。页面上的上传数是两者合计，并分别列出。”；接口说明加 `created`、`updated`、`uploadKind`、`version` 字段
