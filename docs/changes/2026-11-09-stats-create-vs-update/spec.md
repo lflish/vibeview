@@ -1,6 +1,6 @@
 # 统计页区分新建和更新
 
-状态：草案　阶段：dev-requirements　待关口：A　等级：L1　规模：标准　创建：2026-11-09　更新：2026-11-09
+状态：已确认　阶段：dev-design　待关口：—　等级：L1　规模：标准　创建：2026-11-09　更新：2026-11-09
 
 ## 背景与目标
 
@@ -187,6 +187,8 @@ R1–R5 的场景都有自动化测试（统计单元测试、集成测试、`--
 
 ## 效果页
 
-源文件 `pages/prototype/index.html`。vibeview 服务恢复后上传，链接写在这里（访问码不写进文件）。
+https://view.lflish.fun/v/oMRfmCjL1oT2NqhD（访问码另给；源文件 `pages/prototype/index.html`）
 
 ## 变更记录
+
+- 2026-11-09 关口 A 通过（回复 all）：假设 H1–H10 照原样；c1 同意，AGENTS.md 加一段 devflow 说明。
