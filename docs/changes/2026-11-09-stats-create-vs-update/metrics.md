@@ -35,3 +35,4 @@
 | 2026-11-09 05:03 | dev-test | 用量 | 子 agent 2 次 | 两轮复验；验证轮次累计 B 1 + C 3 = 4（预算 6） |
 | 2026-11-09 05:03 | dev-test | 阶段结束 | | |
 | 2026-11-09 05:03 | dev-release | 阶段开始 | | |
+| 2026-11-09 05:06 | dev-release | 返工 | 0 | 变基到改写后的 origin/main；npm test、test:security、test:browser 通过 |
