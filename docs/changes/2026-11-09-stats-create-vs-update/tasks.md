@@ -22,7 +22,7 @@
 | R2.4 | 单元 | `backfill_deleted_before_upgrade` | 上线前已删除的资源没有元数据 → 无更新，`periodComplete` 为 false | T1 |
 | R3.1 | 浏览器 | `R3.1 卡片显示合计和拆分` | 今日上传显示合计，`#today-split` 文本含 “新建 2” “更新 3” | dev-test |
 | R3.2 | 浏览器 | `R3.2 趋势柱分两段` | 有更新的日期有两个 rect（`data-part="create"` / `"update"`）；聚焦后 `#chart-hover` 含 “新建 X · 更新 Y”；切到“上传体积”仍两段 | dev-test |
-| R3.3 | 浏览器 | `R3.3 月历和当日明细` | 月历格子数字 = 合计；当日列表有 “更新 · v2” 标签；弹窗表格有“动作”列且分页正常 | dev-test |
+| R3.3 | 浏览器 | `R3.3 月历和当日明细` | 月历格子数字 = 合计；当日列表有 “更新 · v2” 标签；弹窗表格有“动作”列且分页正常 |；“N 条仍保留”（评审 d1 的回归断言） | dev-test |
 | R3.4 | 浏览器 | `R3.4 最近活动` | 列表里同时有 “新建”“更新 v<n>”“删除”；回填事件不出现 | dev-test |
 | R3.5 | 单元 + 浏览器 | `aggregate_split_types_projects_sources` / `R3.5 分布和排行显示拆分` | `types[]`、`projects[]`、`sources[]` 都有 `created`/`updated`；页面上类型图例和排行有 “新建 x · 更新 y” | T2 / dev-test |
 | R3.6 | 单元 | `filters_apply_to_updates` | `source`/`type`/`project` 筛选下更新同样被过滤；改项目后更新按当前项目归类 | T2 |
