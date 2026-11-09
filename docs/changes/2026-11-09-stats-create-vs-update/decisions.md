@@ -11,3 +11,8 @@
 | 5 | 需求 | 评审回复 all：做法 B，E1、E2 加入，E3 推迟，Q1 A | 机械 | 用户回复 | — | — | — | — |
 | 6 | 需求 | 新人通读提出 6 点：新建体积重复计算、更新时间口径、无新建记录的老资源 → 写成 H8–H10；回填去重键、崩溃恢复判断、接口字段命名 → 留给设计 | 机械 | dev-requirements 第 6 步 | 前 3 点有合理默认值；后 3 点是实现方法 | 作为 Q 问用户 | 低 | — |
 | c1 | 需求 | AGENTS.md 加一段：新需求按 devflow 放 docs/changes/ | 只有人能做 | 规则文件 | 让其他 agent 也按同一位置找需求 | 不改 | 低 | 关口 A 用户同意（all）；已改 |
+| 7 | 设计 | 在 store.writeMeta 已有的统计钩子里按版本号发现更新（方案 A），不在 updateResource 里单独记（方案 B） | 机械 | 原则2、原则3 | 复用现有意图和提交点；所有生成版本的路径都经过 writeMeta（V3） | 方案 B | 中：B 要另做恢复 | — |
+| 8 | 设计 | 更新事件存 statistics/updates/<id>.<n>.json，去重键 (id, n)；已有日志不迁移，state.version 不变 | 机械 | 原则2 | 版本号不复用（V2），按 (id, n) 去重即可区分新版本和被删的旧版本 | 改 uploads/ 结构 | 低 | — |
+| 9 | 设计 | 接口只新增 created/updated/uploadKind/version/backfilledUpdates/skippedVersions，count/bytes 改为合计 | 机械 | spec R4.1、Q1 A | — | 新开一个接口 | 低 | — |
+| c2 | 设计 | 用户指南“管理统计”一节要加“新建 / 更新”的定义和新字段；用户指南在 .devflow.yml human_decisions 的“对外文案”里 | 只有人能做 | human_decisions | 措辞由用户定；T5 阻塞，其余照常 | 自己定措辞 | 低 | 等用户 |
+| 10 | 设计 | 工程评审 6 条全部采纳：实时只看当前版本；删除前补齐直接写正式日志、失败中止删除，启动顺序 pending-upload → pending-update → pending-delete；新场景放独立脚本 test-statistics-updates.js；趋势图每天一个可交互元素；修正两个测试写法 | 机械 | 独立评审（错误，有明确改法） | 都有代码行号依据 | — | 低 | — |
