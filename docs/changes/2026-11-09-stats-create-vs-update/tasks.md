@@ -24,6 +24,7 @@
 | R3.4 | 浏览器 | `R3.4 最近活动` | 列表里同时有 “新建”“更新 v<n>”“删除”；回填事件不出现 | dev-test |
 | R3.5 | 单元 + 浏览器 | `aggregate_split_types_projects_sources` / `R3.5 分布和排行显示拆分` | `types[]`、`projects[]`、`sources[]` 都有 `created`/`updated`；页面上类型图例和排行有 “新建 x · 更新 y” | T2 / dev-test |
 | R3.6 | 单元 | `filters_apply_to_updates` | `source`/`type`/`project` 筛选下更新同样被过滤；改项目后更新按当前项目归类 | T2 |
+| T3 | 2026-11-09 04:02 | 7e1edd9 | test-statistics-updates 通过（对旧代码运行失败，确认能抓到问题）；test-templates 通过；npm test 通过 |
 | R3.7 | 浏览器 | `R3.7 没有更新时` | 筛到没有更新的来源：显示 “更新 0”，无横向滚动，无 pageerror | dev-test |
 | R3.8 | 浏览器 | `R3.8 统计口径说明` | 口径弹窗含 “更新” 定义，包含 “删除历史版本不算” | dev-test |
 | R4.1 | 单元 + 集成 | `api_keeps_old_fields` | `count`、`bytes`、`backfilledCount`、`kind` 仍在；`count` = created + updated | T2 / T3 |
@@ -91,7 +92,7 @@
 - 依赖：T1
 
 ### T3 集成测试：真实上传路径
-- 状态：进行中
+- 状态：完成
 - 文件：新建 `scripts/test-statistics-updates.js`（独立的服务实例和临时目录，写法照 `scripts/test-statistics-integration.js`）；修改 `package.json` 的 `test:statistics`，把它加在 `test-statistics-integration.js` 之后；修改 `scripts/test-templates.js`（只加 R1.3 的断言）；如测试暴露问题，修改 `lib/statistics-store.js` 或 `server.js`。现有 `test-statistics-integration.js` 不改（它写死的 19 / 21 / 16 等期望值不受影响）
 - 接口：使用现有 `upload()`、`request()`、`auth()`、`summary()`；新增 `uploadUpdate(id, name, token)`：`FormData` 带 `id` 字段
 - 场景：R1.1、R1.2、R1.3、R1.4、R1.5、R1.6、R2.2、R4.1、R5.1、并发更新
@@ -111,7 +112,7 @@
 - 依赖：T2
 
 ### T4 统计页区分新建和更新
-- 状态：待办
+- 状态：进行中
 - 文件：修改 `views/statistics.html`
 - 接口：使用 T2 的字段
 - 场景：R3.1–R3.8（浏览器测试由 dev-test 写）
