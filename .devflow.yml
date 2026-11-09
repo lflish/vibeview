@@ -1,0 +1,57 @@
+# devflow 项目配置（规则见 devflow 的 dev-workflow/references/config.md）。地址只写变量名。
+context: |
+  Node.js + Express 单进程服务（server.js），资源元数据是 JSON 文件，SQLite 只是可重建的索引。
+  另有一个 Docker 渲染 sidecar（render-server.js）。测试是 scripts/ 下的 node 脚本，浏览器测试用 Playwright（--browser）。
+  界面和文档用中文（README 和用户指南有中英双语）；管理端是 views/ 下的原生 HTML/JS，不引入前端框架。
+  已有功能需求在 docs/specs/（旧格式，保留不迁移）；devflow 的新需求放 docs/changes/，并在 docs/specs/README.md 索引里加一行链接。
+
+docs_dir: docs/changes
+autonomy: L1
+
+commands:
+  install: npm ci
+  test: SMOKE_SKIP_RENDER=1 npm test
+  e2e: npm run test:browser
+
+environments:
+  local:
+    start: npm start
+    url_env: VIBEVIEW_LOCAL_URL
+    default_url: http://localhost:3000
+    data: 用隔离的测试配置和数据目录，可随意读写；不要指向生产数据目录
+  production:
+    url_env: VIBEVIEW_PROD_URL
+    data: 只读：只做上线后检查，不上传、不删除、不改访问码
+
+test:
+  e2e_env: local
+  verify_env: local
+  cloud_browser: forbidden     # 管理端和预览页可能含用户内容，不经过云浏览器
+
+human_decisions:
+  - 首页、README、用户指南里的对外文案
+  - 配额、保留天数、访问码有效期这类默认值
+  - 上传 CLI 和 HTTP 接口的不兼容改动
+
+safety_valves: []
+
+invariants:
+  - rule: 统计日志只保存最小事件，不保存文件名、简介、文件内容、访问码或上传 token
+    check: npm run test:statistics
+  - rule: 上传 CLI 和 HTTP 接口保持向后兼容
+    check: SMOKE_SKIP_RENDER=1 bash scripts/smoke.sh
+
+upgrade_doc: ""                # 暂无单独的升级文档：升级说明写进发布说明和 PR
+
+rules:
+  requirements: []
+  design: []
+  build: []
+  test: []
+
+release:
+  bump: patch
+  tag_prefix: v
+  publish: "使用 $release 发布 {version}"
+  production: "使用 $deploy-view 部署 {tag}"
+  post_check: "打开线上首页，确认版本号是 {version}；管理统计页能正常加载"
