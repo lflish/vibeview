@@ -214,7 +214,17 @@ async function run() {
       await evidence(page, 'R3.8'); await page.keyboard.press('Escape');
 
       // 深色主题下同样可读
-      await page.locator('#theme-select').selectOption('dark'); await page.waitForTimeout(80); await evidence(page, 'R3-dark'); await page.locator('#theme-select').selectOption('light');
+      // 深色主题下“更新”标签跟随主题（d2 / N3）：背景要暗，浅色主题下要亮
+      const tagLuminance = () => page.locator('#day-list .kind-tag.update').first().evaluate(el => {
+        const c = getComputedStyle(el).backgroundColor, m = c.match(/[\d.]+/g).map(Number);
+        const rgb = c.startsWith('color(srgb') ? m.slice(0, 3) : m.slice(0, 3).map(v => v / 255);
+        const lin = v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+        return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
+      });
+      assert.ok(await tagLuminance() > 0.8, 'light theme update tag is light');
+      await page.locator('#theme-select').selectOption('dark'); await page.waitForTimeout(80);
+      assert.ok(await tagLuminance() < 0.35, 'dark theme update tag is dark');
+      await evidence(page, 'R3-dark'); await page.locator('#theme-select').selectOption('light');
       assert.deepEqual(errors, []);
       console.log('statistics updates browser: cards, stacked trend, calendar/day/dialog tags, activities, breakdowns, empty-update filter, definitions, responsive layout passed');
     } finally { await browser.close(); }
