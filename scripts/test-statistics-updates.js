@@ -137,6 +137,89 @@ async function run() {
     assert.ok(!text.includes('PRIVATE') && !text.includes('filename') && !text.includes('access'), dir + '/' + file);
   }
 
+  // ---- 浏览器：统计页区分新建和更新（R3.1–R3.8）----
+  if (process.argv.includes('--browser')) {
+    const { chromium } = require('playwright');
+    const evidenceDir = process.env.DEVFLOW_EVIDENCE_DIR;
+    const evidence = async (page, name) => { if (evidenceDir) await page.screenshot({ path: path.join(evidenceDir, name + '.png'), fullPage: true }); };
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } }); const page = await context.newPage();
+      const errors = []; page.on('pageerror', e => errors.push(e.message));
+      await page.goto(base + '/admin/login'); await page.locator('#user').fill('test'); await page.locator('#password').fill('updates-test-password'); await page.locator('#submit').click(); await page.waitForSelector('#rows tr');
+      const loaded = () => page.waitForFunction(() => !document.getElementById('stats-content').hidden && !document.getElementById('day-list').textContent.includes('正在加载'));
+      await page.goto(base + '/admin/statistics'); await loaded();
+      const api = await summary(), today = api.summary.today;
+
+      // R3.1 卡片显示合计和拆分
+      assert.equal((await page.locator('#today-value').textContent()).trim(), today.count + '个');
+      assert.equal((await page.locator('#today-split').textContent()).replace(/\s+/g, ''), '新建' + today.created.count + '更新' + today.updated.count);
+      assert.equal((await page.locator('#period-split').textContent()).replace(/\s+/g, ''), '新建' + api.summary.uploads.created.count + '更新' + api.summary.uploads.updated.count);
+      await evidence(page, 'R3.1');
+
+      // R3.2 趋势柱分两段：每天一个可交互元素；聚焦显示拆分；切到体积仍分两段
+      assert.equal(await page.locator('#trend-chart rect.bar').count(), api.daily.length);
+      assert.equal(await page.locator(`#trend-chart [data-part="update"][data-date="${api.today}"]`).count(), 1);
+      assert.equal(await page.locator(`#trend-chart [data-part="create"][data-date="${api.today}"]`).count(), 1);
+      await page.locator(`#trend-chart rect.bar[data-date="${api.today}"]`).focus();
+      assert.match(await page.locator('#chart-hover').textContent(), new RegExp('新建 ' + today.created.count + ' · 更新 ' + today.updated.count));
+      await page.getByRole('button', { name: '上传体积', exact: true }).click();
+      assert.equal(await page.locator(`#trend-chart [data-part="update"][data-date="${api.today}"]`).count(), 1, 'bytes metric is split too');
+      await page.getByRole('button', { name: '文件数', exact: true }).click();
+      await evidence(page, 'R3.2');
+
+      // R3.3 月历和当日明细
+      const cell = page.locator(`#calendar-grid button[data-day="${api.today}"]`);
+      assert.match(await cell.locator('.day-count').textContent(), new RegExp('^' + today.count));
+      assert.match(await cell.getAttribute('aria-label'), new RegExp('新建 ' + today.created.count + ' 更新 ' + today.updated.count));
+      assert.equal(await cell.locator('.mix i.update').count(), 1);
+      assert.match(await page.locator('#day-list').textContent(), /更新 · v\d/);
+      assert.match(await page.locator('#day-retained').textContent(), /条仍保留/, 'review d1: records, not resources');
+      await page.getByRole('button', { name: '查看当日记录 →', exact: true }).click(); await page.waitForSelector('#dialog-body tbody tr');
+      assert.deepEqual(await page.locator('#dialog-body thead th').allTextContents(), ['文件', '动作', '类型', '来源', '上传时间', '状态']);
+      const actions = await page.locator('#dialog-body tbody tr td:nth-child(2)').allTextContents();
+      assert.ok(actions.every(a => a === '新建' || /^更新 · v\d+$/.test(a)), actions.join(','));
+      assert.match(await page.locator('#dialog-body').textContent(), /条仍保留/);
+      await evidence(page, 'R3.3'); await page.keyboard.press('Escape');
+
+      // R3.4 最近活动
+      const activity = await page.locator('#activity-list').textContent();
+      assert.match(activity, /更新 v\d/); assert.ok(api.activities.slice(0, 4).every(a => activity.includes(a.kind === 'delete' ? '删除' : a.uploadKind === 'update' ? '更新 v' + a.version : '新建')));
+      await page.getByRole('button', { name: '删除', exact: true }).click(); assert.match(await page.locator('#activity-list').textContent(), /账户删除/);
+      await page.getByRole('button', { name: '全部', exact: true }).click();
+      await evidence(page, 'R3.4');
+
+      // R3.5 类型分布和排行
+      const html = api.types.find(t => t.type === 'html');
+      assert.match(await page.locator('#type-legend').textContent(), new RegExp('新建 ' + html.created.count + ' · 更新 ' + html.updated.count));
+      const alice = api.sources.find(r => r.source === 'alice');
+      assert.match(await page.locator('#source-ranking').textContent(), new RegExp('新建 ' + alice.created.count + ' · 更新 ' + alice.updated.count));
+      assert.match(await page.locator('#project-ranking').textContent(), /新建 \d+ · 更新 \d+/);
+      await evidence(page, 'R3.5');
+
+      // R3.6 / R3.7 筛到没有更新的来源：各处显示更新 0，布局正常
+      await page.locator('#source').selectOption('tiny'); await page.waitForFunction(() => document.getElementById('source').value === 'tiny' && !document.getElementById('stats-content').hidden);
+      await loaded();
+      assert.equal((await page.locator('#today-split').textContent()).replace(/\s+/g, ''), '新建1更新0');
+      assert.equal(await page.locator('#trend-chart [data-part="update"]').count(), 0);
+      for (const width of [1440, 768, 390]) { await page.setViewportSize({ width, height: 900 }); await page.waitForTimeout(80); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no horizontal scroll at ' + width); }
+      await evidence(page, 'R3.7');
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.getByRole('button', { name: '重置', exact: true }).click(); await loaded();
+
+      // R3.8 统计口径说明
+      await page.locator('#definitions').click(); await page.waitForSelector('#dialog-body .definition');
+      const definitions = await page.locator('#dialog-body').textContent();
+      assert.match(definitions, /更新/); assert.match(definitions, /删除历史版本，都不算更新/); assert.match(definitions, /上传 = 新建 \+ 更新/);
+      await evidence(page, 'R3.8'); await page.keyboard.press('Escape');
+
+      // 深色主题下同样可读
+      await page.locator('#theme-select').selectOption('dark'); await page.waitForTimeout(80); await evidence(page, 'R3-dark'); await page.locator('#theme-select').selectOption('light');
+      assert.deepEqual(errors, []);
+      console.log('statistics updates browser: cards, stacked trend, calendar/day/dialog tags, activities, breakdowns, empty-update filter, definitions, responsive layout passed');
+    } finally { await browser.close(); }
+  }
+
   // R2.2 重启、删索引后重启都不重复
   const totals = (await summary()).summary.uploads;
   await stop(); await start(); await login();
