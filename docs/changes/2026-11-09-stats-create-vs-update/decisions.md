@@ -25,3 +25,4 @@
 | 15 | 测试 | 浏览器测试按项目惯例写进 scripts/test-statistics-updates.js --browser 并加进 test:browser，不另引入 Playwright Test 和 devflow-browser.js | 机械 | 原则2（跟随项目） | 项目所有浏览器测试都是 scripts/*.js --browser；cloud_browser 禁用，只用本机无头浏览器 | 新建 tests/e2e + Playwright Test | 低 | — |
 | c4 | 测试 | 新增 .agents/skills/verify-vibeview（启动隔离实例、体检、操作、日志、证据、清理 + 3 个功能文件），已实际跑通一次 | 只有人能做 | 规则文件（.agents/ 下的 skill） | dev-test 要求生成项目验证 skill；但 .agents/ 下的 skill 属于约束 AI 的规则文件，要用户同意 | 不生成 | 低 | 等用户；不影响本需求的验证 |
 | 16 | 测试 | 跑通 verify skill 时发现 start.sh 记录的 PID 是包装子 shell，导致调用方挂起、stop.sh 关不掉 node；改为直接后台启动 node | 机械 | 运行结果 | 修后完整跑通：启动 → 体检 → 1 新建 2 更新 → 重启 → 清理 | — | 低 | — |
+| d2 | 测试 | 深色主题下“更新”标签的配色（N3）：推荐现在顺手改为跟随主题变量，需要再派一个验证者复验 | 口味 | 独立验证备注 | 改动 1 行 CSS，用户能看到 | 留到后续 | 低 | 等用户 |
