@@ -11,6 +11,7 @@
 | T4 | 2026-11-09 04:05 | a0746b1 | npm run test:browser 通过（含统计页 390/768/1440 无横向滚动）；带更新数据的截图检查无报错 |
 | T5 | 2026-11-09 04:06 | 30b6ebb | 两份指南都有新建/更新定义和新字段（grep uploadKind 各 1 处） |
 | T6 | 2026-11-09 04:55 | aa70074 | 新断言先失败后通过；npm run test:browser、npm test 通过 |
+| T7 | 2026-11-09 05:00 | c8b18ca | 对比度断言先失败（4.10）后通过；npm run test:browser、npm test 通过 |
 | R1.2 | 集成 | `R1.2 站点更新` | 站点 zip 更新：`types` 里 site 的 `updated.count` 1，`bytes` = 新版本解压大小 | T3 |
 | R1.3 | 集成 | `R1.3 模板渲染生成新版本` | `scripts/test-templates.js` 第 171 行附近带 `id` 渲染之后，管理员统计 `summary.uploads.updated.count` ≥ 1 | T3 |
 | R1.4 | 集成 | `R1.4 被拒的更新不计` | 类型不一致 400、他人资源 403、超配额 429 后，`created`、`updated` 都不变 | T3 |
@@ -149,6 +150,12 @@
 - 完成定义：`node scripts/test-statistics-updates.js --browser` 通过；`npm run test:browser` 通过
 - 依赖：无
 
+### T7 返工：“更新”标签对比度
+- 状态：完成
+- 来源：独立验证（复验）N5：T6 让浅色下文字对比度从 4.58 降到 4.10，低于 4.5
+- 文件：`views/statistics.html`（浅色恢复原配色，深色单独覆盖）；`scripts/test-statistics-updates.js`（两种主题下对比度 ≥ 4.5 的断言，先失败于 4.10）
+- 完成定义：`npm run test:browser`、`npm test` 通过
+
 ## 进度
 
 | 任务 | 完成时间 | 提交 | 测试 |
@@ -163,3 +170,4 @@
 - N1 当日明细的更新行显示资源当前的文件名，不是那个版本上传时的文件名（独立验证备注）
 - N2 历史版本被删除后，它的更新记录仍显示“保留中”（独立验证备注）
 - ~~N3 深色主题下“更新”标签太亮~~（已在 T6 修复）
+- N4 深色主题下当日明细还有几处写死的浅色（文件图标、“今天”标签、分隔线、热度图例、弹窗里的站点标签），之前就有
