@@ -22,3 +22,6 @@
 | 13 | 开发 | T1 和 T2 一起实现、一起提交 | 机械 | 原则3 | T1 的行为只能通过 T2 的 created/updated 字段观察到，分开写测试要先造临时接口 | 分开两次提交 | 低 | — |
 | 14 | 开发 | summary.current 保持原形状（count、bytes、backfilledCount），不加 created/updated | 机械 | design 4.2 | 当前存量不分新建和更新 | — | 低 | — |
 | d1 | 开发 | 当日“仍保留”数：接口 retainedCount 含义不变，页面文案由“个”改为“条” | 口味 | 独立评审（取舍）；R4.1 | 不改已有字段含义 | 接口按资源去重 | 低 | 已按此做；用户可改 |
+| 15 | 测试 | 浏览器测试按项目惯例写进 scripts/test-statistics-updates.js --browser 并加进 test:browser，不另引入 Playwright Test 和 devflow-browser.js | 机械 | 原则2（跟随项目） | 项目所有浏览器测试都是 scripts/*.js --browser；cloud_browser 禁用，只用本机无头浏览器 | 新建 tests/e2e + Playwright Test | 低 | — |
+| c4 | 测试 | 新增 .agents/skills/verify-vibeview（启动隔离实例、体检、操作、日志、证据、清理 + 3 个功能文件），已实际跑通一次 | 只有人能做 | 规则文件（.agents/ 下的 skill） | dev-test 要求生成项目验证 skill；但 .agents/ 下的 skill 属于约束 AI 的规则文件，要用户同意 | 不生成 | 低 | 等用户；不影响本需求的验证 |
+| 16 | 测试 | 跑通 verify skill 时发现 start.sh 记录的 PID 是包装子 shell，导致调用方挂起、stop.sh 关不掉 node；改为直接后台启动 node | 机械 | 运行结果 | 修后完整跑通：启动 → 体检 → 1 新建 2 更新 → 重启 → 清理 | — | 低 | — |
