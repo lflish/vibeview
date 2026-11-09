@@ -1,6 +1,6 @@
 {
   "name": "dview",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "通用预览服务：上传 HTML/图片/视频，渲染并返回随机预览链接",
   "author": "lflish <hxy.gold@gmail.com>",
   "type": "commonjs",
