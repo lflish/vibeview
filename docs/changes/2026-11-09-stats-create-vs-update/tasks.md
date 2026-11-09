@@ -65,6 +65,9 @@
   - `backfill_deleted_before_upgrade`：没有元数据的资源无法回填（只断言 `updated.count` 不含它）
   - `legacy_resource_update_counts`：现有 `invalid`（创建时间无效）资源加 v2 → `updated.count` +1，`skippedMetadata` 不变
   - `seed_uses_v1_size`：新建记录缺失、元数据 `size` 300 但 v1 size 100 → 回填新建 `bytes` 100
+  - `current_version_invalid_returns_null`：当前版本 v2 的 `createdAt` 无效 → 改访问码写元数据不抛错，不记更新
+  - `recover_uncommitted_update_cleans_dir`：意图 v3 存在、元数据 current 为 2、`.versions/3` 目录存在 → 重启后意图和目录都被删，不记
+  - `state_missing_with_updates_throws`：删掉 `state.json`、保留 `updates/` → 初始化抛 `/Statistics state is missing/`
   - `corrupt_update_journal_throws`：`updates/` 写 `{}` → 初始化抛 `/Invalid statistics journal/`
   - 扩展现有日志隐私循环，目录加上 `updates`、`pending-update`
 - 完成定义：`node scripts/test-statistics.js` 输出 `statistics unit: … passed`，退出码 0

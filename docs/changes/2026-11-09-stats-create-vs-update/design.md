@@ -36,9 +36,9 @@ graph TD
 
 - `prepareUpload(meta) → ticket | null`：ticket 从“一个上传事件”变成 `{ upload: event | null, updates: event[] }`；两者都空时返回 `null`。
   - 新资源（元数据文件还不存在）：`upload` 照旧；它带的版本（只有 v1）不产生更新。
-  - 已有资源：**只看当前版本** `n = versions.current(meta)`：n ≥ 2 且 (id, n) 没记过，生成一条更新意图（`backfilled: false`）。每次更新正好产生一个新版本，而且它就是当前版本（`server.js:452-480`）。改访问码、分类、删除历史版本时当前版本已记过，返回 `null`。扫描全部版本只在启动回填时做，所以回填时跳过的无效版本不会在之后的元数据写入里被再次处理（工程评审 #1）。
+  - 已有资源：**只看当前版本** `n = versions.current(meta)`：n ≥ 2 且 (id, n) 没记过，生成一条更新意图（`backfilled: false`）。每次更新正好产生一个新版本，而且它就是当前版本（`server.js:452-480`）。改访问码、分类、删除历史版本时当前版本已记过，返回 `null`。扫描全部版本只在启动回填时做，所以回填时跳过的无效版本不会在之后的元数据写入里被再次处理（工程评审 #1）。当前版本自己的记录无效（时间或大小不合法）时也返回 `null`，不抛错、不编造时间（方案验证备注 1）。
 - `cancelUpload(ticket)`、`commitUpload(meta, ticket)`：处理 ticket 里的全部意图。
-- `prepareDelete(meta, reason)`：在写删除意图之前，把 `pending-update/` 里属于这个资源的意图用 `atomic` 直接写成 `updates/<id>.<n>.json`（保留 `backfilled: false`），再删意图；**写失败就抛错，删除失败**（和写删除意图失败时一致）。“是否已记”以磁盘上的 `updates/` 文件为准，不看内存（工程评审 #4）。
+- `prepareDelete(meta, reason)`：在写删除意图之前，把 `pending-update/` 里属于这个资源、**且已提交**（判断同启动恢复：`versions` 里有 n，或 `current ≥ n`）的意图用 `atomic` 直接写成 `updates/<id>.<n>.json`（保留 `backfilled: false`），再删意图（没提交的直接删掉，不计，方案验证备注 3）；**写失败就抛错，删除失败**（和写删除意图失败时一致）。“是否已记”以磁盘上的 `updates/` 文件为准，不看内存（工程评审 #4）。
 - `seed(meta)`（回填新建）：体积改为第 1 版的大小 `versions.find(meta, 1)?.size`，没有版本记录时退回 `meta.size`（H8）。
 
 ### 4.2 `GET /admin/api/statistics`（只新增字段，R4）
@@ -80,6 +80,7 @@ graph TD
 
 - `at` 取版本记录的 `createdAt`（H9），`bytes` 取版本记录的 `size`（H1）。`project` 只在有值时写（和新建一致）。
 - 读取时校验：文件名里的 id 和 n 必须和内容一致，`version` 是 ≥ 2 的整数，其余规则同上传事件；不合法就报错停下（现有做法：日志损坏不能当成零）。
+- 启动时“统计状态缺失”的检查（`lib/statistics-store.js:99`）把 `updates` 也算进去：有更新日志而没有 `state.json` 时同样报错（方案验证备注 4）。
 - **已有数据不迁移**：`uploads/`、`deletions/`、`state.json` 原样保留，`state.version` 不变。新目录在第一次启动时创建并回填。
 - 去重键是 (id, n)。`updates` 在内存里按 `id.n` 存。版本号不会复用（新版本号 = 现有最大 + 1，当前版本不能删，见 V2），所以“记过的 (id, n) 不再记”就足以区分“新版本”和“被删掉的旧版本”。
 
@@ -94,7 +95,7 @@ graph TD
 启动时（`initialize`），在现有恢复之后：
 
 1. 读 `updates/`。
-2. 处理 `pending-update/`，**在现有的 `pending-upload` 之后、`pending-delete` 之前**：元数据存在且（`versions` 里有 n，或 `current ≥ n`）→ 转正；元数据不存在 → 删意图，不计（删除时已经把意图转正，留下的只可能是没提交的）（R1.7）。
+2. 处理 `pending-update/`，**在现有的 `pending-upload` 之后、`pending-delete` 之前**：元数据存在且（`versions` 里有 n，或 `current ≥ n`）→ 转正（先像现有恢复一样检查 id、type 一致，不一致就报错停下）；元数据存在但两条都不满足 → 删意图，不计，并删掉可能留下的 `.versions/<n>` 目录（否则下一次更新复用 n 时重命名会失败，方案验证备注 2）；元数据不存在 → 删意图，不计（删除时已经把意图转正，留下的只可能是没提交的）（R1.7）。
 3. 遍历元数据时（现有循环），对每个资源补齐：`versions` 里 n ≥ 2 且没记过的版本，记为回填更新（`backfilled: true`）；`createdAt` 无效或 `size` 不是非负整数的跳过，计入 `skippedVersions`（R2.3）。已记过的不动，所以重启、删索引后重启都不重复（R2.2）。
 
 老代码运行期间产生的版本：下次用新代码启动时按回填补上，标“回填”。
@@ -147,4 +148,11 @@ graph TD
 
 ## 11. 方案验证（机器关口 B）
 
-（待验证）
+- 结论：**通过，有备注**（第 1 轮，2026-11-09）
+- 验证者：same（全新子 agent，没参与设计）。codex 不可用：探测返回 403 `NOT_ENOUGH_MEMBER_BUDGET`；claude 跳过（与写方案的是同一工具）
+- 对照：R1.1–R5.1 每个场景都对应到设计小节和任务或测试（详见 `evidence/gate-b-verdict.md`）
+- 重跑的前置验证：V1、V4 用只读脚本读生产元数据和统计日志（49 个资源，3 个多版本，5 条更新版本，无效 0；新建事件体积都等于 v1）；V2、V3、V5 逐行核对代码，都成立
+- 工程评审 6 条：都已处理（`evidence/eng-review.md`）
+- 备注 1–4（当前版本无效、恢复少一个分支、删除前补齐可能多记、状态缺失检查）：已写进 4.1、第 5、6 节，T1 加了对应测试
+- 备注 5：R5.1 的措辞和现有行为矛盾 → c3，等用户
+- 未决定、只能由用户决定的事：c2（用户指南措辞）、c3（R5.1 措辞）

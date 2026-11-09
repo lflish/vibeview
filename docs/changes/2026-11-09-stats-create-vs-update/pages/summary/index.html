@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>统计区分新建和更新 · 汇总</title>
+<style>
+:root{--bg:#f6f8fb;--panel:#fff;--line:#e2e8f0;--text:#1e293b;--muted:#64748b;--blue:#2563eb;--soft:#eaf1ff;--amber:#b45309;--amberbg:#fef3e2;--green:#047857;--greenbg:#ecfdf5}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}
+main{max-width:920px;margin:auto;padding:24px 16px 48px}
+h1{font-size:24px;margin:0 0 4px;letter-spacing:-.4px}h2{font-size:16px;margin:0 0 10px}h3{font-size:14px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:13px;margin:0 0 18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:14px}
+.status{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.pill{font-size:12px;border-radius:999px;padding:3px 10px;background:var(--soft);color:var(--blue)}.pill.ok{background:var(--greenbg);color:var(--green)}.pill.wait{background:var(--amberbg);color:var(--amber)}
+.steps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-bottom:14px}
+.step{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--muted)}.step b{display:block;color:var(--text);font-size:13px}.step.done{border-color:#a7f3d0}.step.now{border-color:var(--blue);box-shadow:0 0 0 2px #2563eb22}
+.decision{border-left:3px solid var(--amber);padding:8px 12px;margin:10px 0;background:#fffbf3;border-radius:0 8px 8px 0}
+.decision p{margin:4px 0;font-size:13px}.decision .rec{color:var(--green);font-weight:600}
+ul{margin:6px 0;padding-left:20px}li{margin:3px 0}
+table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:500;background:#f8fafc}
+.scroll{overflow-x:auto}
+.ev{color:var(--muted);font-size:12px}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.m{background:var(--bg);border-radius:10px;padding:10px}.m b{display:block;font-size:20px}.m small{color:var(--muted);font-size:11px}
+code{background:#f1f5f9;border-radius:4px;padding:1px 5px;font-size:12px}
+@media(max-width:640px){.steps{grid-template-columns:repeat(2,minmax(0,1fr))}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<main>
+  <h1>统计页区分新建和更新</h1>
+  <p class="sub">vibeview · 第一次用 devflow 跑的需求 · 等级 L1 · 更新于 2026-11-09</p>
+
+  <div class="status"><span class="pill ok">方案验证通过（有备注）</span><span class="pill wait">等你：B、c2、c3</span></div>
+
+  <div class="steps">
+    <div class="step done"><b>需求 ✓</b>关口 A 通过</div>
+    <div class="step now"><b>设计</b>机器关口 B 通过，等你看</div>
+    <div class="step"><b>开发</b>4 个任务</div>
+    <div class="step"><b>测试</b>浏览器验收</div>
+    <div class="step"><b>发布</b>上生产要你确认</div>
+  </div>
+
+  <section class="card">
+    <h2>等你决定（3 件）</h2>
+    <div class="decision">
+      <h3>B. 方案可以开始开发吗？</h3>
+      <p>改动集中在统计模块：资源每多一个版本号就记一次“更新”，沿用现有的“先写意图、元数据落盘才算数”机制，重启不丢不重。统计页各处分开显示新建和更新。</p>
+      <p class="rec">推荐：开始开发</p>
+    </div>
+    <div class="decision">
+      <h3>c2. 用户指南“管理统计”一节加这段说明，措辞可以吗？</h3>
+      <p>“上传分为新建和更新：新建是第一次上传、生成新链接；更新是给已有链接上传新版本（同一路径再次上传、--id、模板重新渲染）。改访问码、分类、简介或删除历史版本都不算更新。页面上的上传数是两者合计，并分别列出。”英文版对应翻译。</p>
+      <p>为什么问：用户指南列在 <code>.devflow.yml</code> 的“只有人能定的对外文案”里。只有文档任务等这一条，其余照常。</p>
+      <p class="rec">推荐：同意</p>
+    </div>
+    <div class="decision">
+      <h3>c3. 隐私验收（R5.1）的写法要改一下吗？</h3>
+      <p>原来写的是“统计接口返回里找不到文件名”。但统计页本来就会显示仍保留资源的文件名（已删除的才隐藏），照字面验收会失败。</p>
+      <p>建议改为：统计日志里不含文件名、简介、访问码、token；统计接口不含 token、简介、访问码和访问哈希；仍保留的资源照旧显示文件名。</p>
+      <p class="rec">推荐：按建议改</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>做了什么</h2>
+    <ul>
+      <li>选定做法：在每次写资源元数据时发现新版本号就记一次更新，普通上传、<code>--id</code>、<code>.dview.json</code> 自动更新、模板渲染都覆盖到 <span class="ev">（design.md 第 1 节；代码核对 server.js:335、484、656）</span></li>
+      <li>生产数据只读核对：49 个资源里 3 个有更新，共 5 次，版本记录全部有效，可以补回 <span class="ev">（evidence/gate-b-verdict.md）</span></li>
+      <li>独立工程评审拦下 6 个问题，已全部改进方案。最重要的两个：回填跳过的无效版本会让之后改访问码失败；新测试会打乱现有浏览器测试里写死的数字 <span class="ev">（evidence/eng-review.md）</span></li>
+      <li>独立方案验证：每个验收场景都能对应到设计和测试，前置验证重跑通过；4 条备注已写进设计 <span class="ev">（design.md 第 11 节）</span></li>
+      <li>现有测试全部通过，作为开发前的基线 <span class="ev">（SMOKE_SKIP_RENDER=1 npm test，33 秒）</span></li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>方案要点</h2>
+    <div class="scroll"><table>
+      <tr><th>问题</th><th>做法</th></tr>
+      <tr><td>怎么发现一次更新</td><td>写元数据时，当前版本号没记过就记一次；改访问码、分类、删历史版本时版本号不变，不记</td></tr>
+      <tr><td>崩溃了怎么办</td><td>先写意图，元数据落盘才算数；重启时有元数据就补记，没有就丢弃</td></tr>
+      <tr><td>历史更新</td><td>上线首次启动时按资源保留的版本补记，标“回填”；无效记录跳过并计数</td></tr>
+      <tr><td>接口兼容</td><td>只加字段：<code>created</code>、<code>updated</code>、<code>uploadKind</code>、<code>version</code>；<code>count</code> 改为合计</td></tr>
+      <tr><td>页面</td><td>卡片、趋势图（两段柱）、月历、当日明细、最近活动、分布和排行都分开显示</td></tr>
+    </table></div>
+  </section>
+
+  <section class="card">
+    <h2>接下来</h2>
+    <ul>
+      <li>你回复后：按 4 个任务开发（先写测试再实现），完成后独立代码评审，再进入测试阶段</li>
+      <li>文档任务等 c2</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>数据</h2>
+    <div class="metrics">
+      <div class="m"><b>4</b><small>问你的次数</small></div>
+      <div class="m"><b>1 / 1</b><small>机器关口 B 轮次 / 通过</small></div>
+      <div class="m"><b>6</b><small>评审拦下的问题</small></div>
+      <div class="m"><b>3</b><small>独立子 agent</small></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>历史</h2>
+    <ul>
+      <li>2026-11-09 机器关口 B 通过（有备注），等你看</li>
+      <li>2026-11-09 关口 A 通过</li>
+      <li>2026-11-09 需求评审回复 all</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
